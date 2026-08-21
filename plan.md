@@ -658,6 +658,59 @@ is not the written exit criterion. **Phase 2 exit is not formally signed off —
 
 ---
 
+### D18 — Local-GPU training and preprocessing budgets, measured. Neither Colab nor CuPy/cuML is needed for the scheduled work.
+
+Two recurring proposals — "train on Colab, the 4 GB card is too small" and "accelerate
+preprocessing with CuPy + RAPIDS cuML" — are both answered by measurement rather than judgement.
+Measured 2026-08-21 on the actual target hardware (GTX 1650, 4096 MiB, torch 2.13.0+cu130).
+
+**Training (§3B `LightUNet`, representative 0.29 M-param U-Net, C=30, 64×64, batch 16, AMP fp16):**
+
+```
+per iteration   73.7 ms         per epoch    9.65 s  (131 steps, 2088 patches)
+100 epochs      16.1 min        300 epochs   48.3 min
+peak VRAM       113 MiB of 4096            ~3% of the card
+```
+
+The 4 GB limit is **not binding** for the P0 model — there is ~36× headroom. The reason is
+`reduce_bands`: training consumes **C=30**, not 184 bands. D12 Rule 1 therefore stands on
+scheduling grounds alone, and now also on the simple ground that the local card is sufficient.
+If `train_unet.py` lands materially larger, re-measure — but it would need ~30× more model
+before VRAM matters.
+
+**Preprocessing (§3E path: PCA C=30 → `n_features=8`, then MinMax to [0, π]):**
+
+| workload | PCA fit+transform | MinMax |
+|---|---|---|
+| one patch (4 096 px) | 100.6 ms | 1.3 ms |
+| 100 k px subsample | 26.5 ms | 14.8 ms |
+| 1 M px subsample | 154.6 ms | 134.7 ms |
+
+**Under 0.3 s on CPU for a million pixels.** A CuPy/cuML port would spend comparable time on the
+host↔device round trip alone, before cuML's multi-second import. There is no CPU bottleneck here
+to remove: §3E's cost is **AerSimulator circuit execution**, which is unaffected by how the
+features were produced.
+
+**Consequence for the quantum branch.** §3E.2 already requires `classical_reduce` to reuse
+`preprocessing/harmonize.reduce_bands`, because *"comparing a quantum model on one feature basis
+against a classical model on another measures the basis, not the model."* A separate GPU
+preprocessing pipeline with its own PCA and its own band selection would produce a different
+basis and **invalidate §3E.6, which is the branch's actual deliverable**. It would also
+re-implement band selection outside `harmonize()`/`coverage_ok` (the D11.6 trap) and re-open the
+train-split-only fitting constraint that D15 closed.
+
+**If GPU preprocessing is still wanted**, it is an *optional backend behind the existing
+interface*, never a parallel path. Conditions, all of them: it consumes `harmonize()` output and
+never selects bands itself; it applies the **already-fitted** transformer from §3B.3 and never
+re-fits; `cupy`/`cuml` are optional imports that fall back to NumPy, with tests `skipif`-guarded
+so a fresh clone stays green (CONTRIBUTING); and a numerical-equivalence test asserts the GPU path
+matches the CPU path within tolerance. A CPU-vs-GPU preprocessing benchmark is then a legitimate
+engineering result, reported separately from the quantum comparison — which is what the proposal
+was actually after.
+
+> Note also §0.3: `edge/` code must run with **no CUDA at inference**. A CUDA-only preprocessing
+> path cannot appear anywhere the edge arm depends on.
+
 ### D16 — EnMAP L2A does NOT fully cover the canonical grid. `harmonize()` raises on it, correctly.
 
 Verified 2026-08-21 against a real product metadata file
