@@ -1020,6 +1020,61 @@ and that is a property of the datasets, not of the module.
 
 ---
 
+### D21 — `SPECTRA_POOLS["lib"]` is human-gated at BOTH sources, so `unet_implanted_lib` is blocked by retrieval, not by any data limitation. Probed 2026-08-22. One of the two advertised URLs answers a Range request with **HTTP 206 `text/html`**.
+
+D19 recorded that three of §3B.8's five learned arms are suspended pending O9. It did not check
+the fourth. **`unet_implanted_lib` is blocked too** — and therefore `unet_pretext` is currently
+the *only* trainable arm of five, which makes §3B.8's headline `implanted_lib` vs `pretext`
+comparison a one-sided table rather than the comparison the plan is built around. That was
+implicit in `synth.load_target_spectra`'s `FileNotFoundError` ("no `scripts/fetch_speclib.py`
+exists") but nowhere stated as a §3B.8 consequence.
+
+The cause is **not** the missing-wavelength problem behind O8/D19/D20. It is retrieval.
+
+| source | status | evidence |
+|---|---|---|
+| `usgs_splib07` | human-gated | DOI `10.5066/F7RR1WDJ` → ScienceBase `5807a2a2e4b0841e59e3a18d`. `usgs_splib07.zip`, 5 479 324 354 B, `"pathOnDisk": "__s3__"`, `"published": false`, `checksum: null`, and an `s3DownloadRequestPageUri`. Both advertised URLs return HTML. |
+| `ecostress_aster` | human-gated | `https://speclib.jpl.nasa.gov/download` is a "Request Download" form (6 139 files across 9 categories). No unauthenticated direct-download URL. |
+
+**The trap, and it is a new one.** `https://sciencebase.usgs.gov/manager/download/<cuid>` answers
+`curl -r 0-511` with **HTTP 206, `Content-Type: text/html`** — a partial-content response that a
+downloader reads as "range requests work, resuming supported", while the payload is the
+ScienceBase web UI. A naive resumable downloader writes 5 GB of HTML and exits 0. `assert_magic`
+alone would not have saved us either, since it is `assert_not_html` that catches this;
+**both guards in `core/http_guard.py` are load-bearing, and this is the first case found where
+the status code actively argues for the wrong conclusion.** Note the contrast with the BigTIFF
+bug, where our own guard was too strict; here the server is the one lying.
+
+**Consequence for §3B.8, stated plainly.** Of five learned arms: three suspended pending O9
+(D19), one blocked pending this retrieval (D21), one trainable (`unet_pretext`). The
+implanted-vs-pretext comparison the plan calls "always the headline" cannot be run until a human
+fetches an archive. Unlike O9 — which needs per-sensor wavelengths nobody has — **this one is
+cheap to clear**: two browser downloads, no account, no payment. It belongs on the same list as
+the EnMAP downloads and the QGIS eyeball, and it is the highest-value item on that list, because
+it converts §3B.8 from one arm to two.
+
+**What was deliberately NOT done.** Several third-party GitHub repos redistribute ECOSTRESS/ASTER
+subsets, and pointing the fetcher at one would have made this D-entry unnecessary. They carry no
+publisher-verifiable checksum, and §1.6 requires a provenance record (URL, date, size, license,
+citation) per fetcher. Using a mirror satisfies the code path and fails the standard. This project
+has already declined that trade twice — D11 (HAD100's own project page wrong five ways) and D13
+(ABU and HYDICE wrong three more) — and the CLAUDE.md verification standard is explicit that
+documentation is assumed wrong until checked against the files.
+
+**`scripts/fetch_speclib.py` exists now and does the honest half.** `--check` re-resolves the DOI
+and re-tests the gate, exiting **2** if `pathOnDisk` stops being `__s3__` — i.e. it is a live
+regression test on this D-entry rather than a snapshot of it, and it tells the next reader to
+re-probe with `assert_not_html` rather than trusting the 206. `--ingest` refuses to parse until an
+archive is actually present, and carries the four checks the parser will need — ascending
+wavelength axis (D11.4, silent failure), `coverage_ok` before `harmonize` (D16), **reflectance vs
+radiance scale** (D19 measured HAD100 backgrounds at radiance scale, so a `[0,1]` reflectance
+endmember mixed by `m = a*t + (1-a)*s` would be invisible at every abundance and the §3B.8
+abundance sweep would flatline looking like a model failure), and the `[K, RETAINED_BANDS]` +
+provenance-tag return shape. Writing that parser now, against format documentation nobody on this
+project has checked against a real file, is precisely the D11/D13 mistake.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
@@ -1278,7 +1333,7 @@ Each raises `ContractViolation` with the offending field named. **Accept:** `tes
 | `fetch_enmap.py` | DLR Geoservice STAC → `download.geoservice.dlr.de` (§8.0a) | background pool extension; 5 000-product download cap |
 | `fetch_aviris.py` | NASA AVIRIS/AVIRIS-NG open portal | Phase 5 L2 |
 | `fetch_sentinel2.py` | Copernicus Data Space (account held) | Phase 5 L3 **only** — never the background pool (D7 / Roadmap §9.1) |
-| `fetch_speclib.py` | USGS splib07 (`doi:10.5066/F7RR1WDJ`), ECOSTRESS/ASTER | target endmembers for D7 implantation |
+| `fetch_speclib.py` | USGS splib07 (`doi:10.5066/F7RR1WDJ`), ECOSTRESS/ASTER | target endmembers for D7 implantation. **Built, but cannot fetch — BOTH sources are human-gated (D21).** splib07's 5.48 GB archive is `__s3__`-staged behind a download-request page and its advertised URI answers a Range request with HTTP 206 `text/html`; ECOSTRESS is a request form. `--check` re-tests the gate and exits 2 if it opens. This blocks `unet_implanted_lib`, i.e. half of §3B.8's headline comparison. |
 
 Each fetcher verifies a SHA256 manifest and writes a provenance record into `docs/datasets.md` (URL, date, size, license, citation). **HAD100 must be cited as Li et al., IEEE TGRS 2023, doi:10.1109/TGRS.2023.3258067.**
 
