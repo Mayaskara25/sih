@@ -2179,6 +2179,35 @@ Phase 7  ─ demo assembly
 
 **Critical path:** `contracts → Phase 2 → 3A.harmonize → 3B.synth → 3B training → Phase 4 → Phase 5`.
 
+---
+
+### 11.1 PRIORITY ORDER — read this before claiming any task (added 2026-08-21)
+
+Capacity is finite and the DAG is wider than the schedule. **Build P0 to completion before any
+P1 work starts.** An agent that finishes its task should take the next P0 item, not the most
+interesting one.
+
+| tier | scope | rationale |
+|---|---|---|
+| **P0 — ship this** | finish `3B` (`train_unet` → `infer`) · `local_rx` · `kernel_rx` · `crd` · `streaming_rx` · `fusion` · **Phase 4** · **Phase 5 Level 1** · **Phase 7 `demo.py`** | the critical path plus the benchmark that makes it defensible and the demo that makes it presentable. A working, benchmarked, demoable system. |
+| **P1 — if P0 is done** | `3D`: `profiling` · `constrained_sim` · `roi_pipeline` · `benchmark` · **Phase 6 Tier A** | edge story; simulated only, and §9 forbids reporting power |
+| **P2 — genuinely optional** | `3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net` — and `3E`: the whole quantum arm | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
+| **P3 — deferred, do not start** | `train_alt_arch` · `deep_detector` · `autoencoder` · `quantization` · `onnx_inference` | architecture comparison and deployment polish. Valuable, not load-bearing. |
+| **BLOCKED — never start** | Phase 6 **Tier B** | no instrumented hardware exists (§0.2, §9). Not a scheduling choice. |
+
+**Why this order.** Six half-finished arms score worse than one complete system with its gaps
+documented. §9 and §14 already record what is simulated and what is deferred; deferring
+deliberately is a defensible position, and running out of time mid-arm is not.
+
+**Parallelism note.** P1 and P2 are disjoint from P0 in the filesystem (`edge/`,
+`change_detection/`, `quantum/` versus `segmentation/` and `anomaly/`), so a *separate*
+contributor can take them without touching the critical path. They are P1/P2 for the person
+holding the critical path, not for everyone.
+
+**Nothing in P0 depends on another human.** Every input it needs is on disk. The only external
+waits in the whole project are the QGIS eyeball on Phase 2, the SWIRB verification in D16, and
+Phase 6 Tier B — none of which block P0.
+
 **Hard ordering constraint (D11.3):** `harmonize` is not merely *upstream* of the background pool — it is the **join** that makes the pool a single tensor. AVIRIS-NG reduces to 276 bands and AVIRIS-Classic to 162, so `HAD100 download → main.py unpack → harmonize → pool → 3B.synth`. Pooling before harmonizing does not raise; it just cannot be stacked, and the first person to hit it will assume the download is corrupt.
 **Longest pole:** 3B, because it depends on both `harmonize` and the HAD100 background pool download.
 **Start-immediately, no dependencies:** `3D.profiling`, `3D.constrained_sim`, `3E.qiskit_basics`, and every `scripts/fetch_*.py`. Kick the downloads off on day one — they are large and they gate 3B.
