@@ -997,12 +997,24 @@ fused score toward the same value and would quietly damage the ranking the AUC i
 | scoring set | wavelengths | components | weights |
 |---|---|---|---|
 | **HAD100** (100 test patches) | real, verified (D11) | `rx` · `ace` · `index` · `spatial` | the §3A.9 defaults, unchanged |
-| **ABU** (13), **HYDICE** (1), **Indian Pines** | none (D13.4) | `rx` · `ace` · `spatial` | renormalized: `rx 0.50 · ace 0.3125 · spatial 0.25` |
+| **ABU** (13), **HYDICE** (1), **Indian Pines** | none (D13.4) | `rx` · `ace` · `spatial` | renormalized: `rx 0.4706 · ace 0.2941 · spatial 0.2353` |
 
 **§3A.9's accept criterion is amended** to: fused AUC ≥ best single component on ≥ 10 of 13 ABU
 scenes **for the 3-component fusion**, and the table says `fusion(rx+ace+spatial)` in the method
 column — never bare "fusion", which would read as the 4-component detector and overstate what was
 tested. The 4-component form is accepted separately on HAD100.
+
+**Correction, 2026-08-22 — this entry's own worked example was wrong when first written.** It
+gave the renormalized ABU weights as `rx 0.50 · ace 0.3125 · spatial 0.25`, which sum to
+**1.0625**, not 1.0: the three active weights sum to 0.85 and I divided by 0.80. Caught by the
+agent implementing `fuse_scores`, which asserted the arithmetic instead of transcribing the
+table. It implemented the **general rule** — divide each active weight by the sum of the
+active weights — which the prose above states unambiguously, and which is correct regardless
+of which components are missing. That is the right reading: **the prose is normative and the
+worked example is only an illustration.** Recorded rather than silently patched because a
+hardcoded weight triple is exactly the kind of thing that gets copied out of a plan table
+into a config file, and the wrong one would have skewed every fused ABU score by 6.25% while
+still looking like a deliberate choice.
 
 **Why not just score fusion on HAD100 only, like the learned models?** Because the RX family and
 CRD are scored on all 13 ABU scenes (§3B.8's classical row), and fusion's whole claim is that it
