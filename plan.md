@@ -700,10 +700,22 @@ those 8 marked invalid in `meta.bad_bands`. The pool still stacks to one `[N, 64
 (D11.3 holds), carrying a validity mask rather than invented values. Detectors must already honour
 `bad_bands`; confirm they do before EnMAP enters the pool.
 
-> **Caution — this is one scene, not the collection.** EnMAP selects between **SWIR A and SWIR B**
-> detectors per acquisition (`enmap:SWIRAOrSWIRBSelected` in STAC; this product's metadata
-> references both). A SWIR-B scene may carry a different wavelength array. **Verify the wavelength
-> array per scene**; do not hardcode this one. §8.0 stands.
+**Grid stability — checked across all 8 downloaded scenes, 2026-08-21.** The caution above was
+that a per-acquisition SWIR-detector choice might change the wavelength array. Measured:
+
+| checked | result |
+|---|---|
+| 8 metadata files parsed | all **224 bands, 418.42–2445.30 nm, 91 VNIR + 133 SWIR** |
+| SHA-256 of the wavelength array | **one distinct grid — byte-identical across all 8** |
+| `SWIRAOrSWIRBSelected` | **SWIRA × 8** |
+
+So the grid is stable, and the 8 uncovered canonical bands above are a **constant** for SWIRA
+acquisitions — the per-sensor bad-band mask can be computed once, not per scene.
+
+> **Still open: SWIRB.** All eight scenes in hand are SWIRA, so this verifies stability *within*
+> SWIRA and says nothing about SWIRB. Keep reading the wavelength array from each product's
+> METADATA.XML rather than hardcoding; treat a SWIRB acquisition as unverified until one is
+> opened. §8.0 stands for SWIRB.
 
 ### D15 — `preprocessing/harmonize.py` built (2026-08-21); the C=30 criterion moved to §3B.3 for a leakage reason, not an assembly-order one; the first real georeference check (§3A.1) is closed.
 
@@ -769,6 +781,73 @@ exported centroid falls within one pixel of the independently-computed coordinat
 Indian Pines could not do this (D2, synthetic affine); this is the first time real coordinates
 have been exercised anywhere in the plan, and Phase 5 Level 2 is now the first *independent*
 recheck rather than the first check, as D11.5 anticipated.
+
+---
+
+### D17 — HAD100 background pool built and cached (2026-08-21): 522 scenes → 2088 harmonized patches. The binding resource constraint was RAM, not disk, and the first attempt was OOM-killed finding that out.
+
+**Note on numbering:** D16 (above) was written by other work in this project between sessions —
+this entry did not exist when D16 was inserted, and D16 landed positioned before D15 in the file.
+Left as found rather than reordered, to avoid conflicting with work in progress elsewhere. **D16
+is also directly relevant here**: it establishes that `harmonize()`'s hard-raise-on-any-gap
+behaviour is too strict for EnMAP (176/184 covered, 8 raise) and proposes a per-sensor bad-band
+mask instead of a raise. That resolution is **not implemented** — `harmonize()` still only
+raises or fully succeeds, no partial mode. Out of scope for this entry (HAD100's own raw ENVI
+has 0/184 uncovered on both sensors, D15), but the next thing to touch `harmonize()` should read
+D16 first.
+
+**Built:** `preprocessing/background_pool.py` (`four_corner_offsets`, `harmonize_and_crop_scene`,
+`build_background_pool`, `build_background_pool_to_disk`, `scene_groups`, `save_pool` /
+`save_pool_manifest`) and `scripts/build_background_pool.py`. Crop geometry is HAD100/main.py's
+own four-corner rule (lines 103–111), reproduced as offset arithmetic and cross-checked against
+main.py's literal slicing on a real cube — not re-derived as a judgement call (D11.2). Source is
+the raw ENVI cube per scene (D11.6); each full scene is harmonized **once**, then four 64×64
+corner crops are taken from the harmonized result — verified numerically identical to
+harmonizing each crop separately (harmonize() is per-pixel, order-independent), at roughly a
+quarter of the interpolation cost.
+
+**Result, verified against the built artifact, not just the code:** `data/processed/`
+`had100_background_pool.npy` — `[2088, 64, 64, 184]` float32, 6.29 GB, sha256 recorded in
+`had100_background_pool_summary.json`. 522 unique source scenes (260 NG + 262 Classic), each
+with exactly 4 crops; sensor counts exact (1040 NG, 1048 Classic, matching D11 exactly);
+`array_index` contiguous 0–2087. `had100_background_manifest.csv` carries `scene_id` per patch —
+`scene_groups()` reads it into a `GroupKFold`/`GroupShuffleSplit`-ready array, and is written up
+as **the one sanctioned way** to derive train/val indices from this pool, so a later ad hoc
+patch-index split has to actively bypass the provided function to leak (D11.5's ~47–62 px
+per-axis crop overlap, worse for HAD100's smaller background scenes than the 81×81 case the plan
+originally quoted).
+
+**A real resource-constraint bug, found by the first real run, not by review.** The build was
+planned around "39 GB free disk, 6.29 GB tensor" — true, and irrelevant to what actually failed.
+The first implementation assembled the pool as a Python list of 522 per-scene `[4,64,64,184]`
+arrays, then `np.concatenate`d them: **two live copies of the ~6.3 GB tensor simultaneously**
+(the list, until GC'd, and concatenate's output). This machine has **13 GB RAM total, 8.3 GB
+available, and no swap** (`free -h`, checked directly after the failure, not assumed) — the run
+was killed by the OOM killer (exit 137) partway through, silently, with no Python traceback.
+**Fixed** with `build_background_pool_to_disk`: a `numpy.lib.format.open_memmap` preallocated at
+the final shape, written directly slice-by-slice as each scene is processed, so the tensor never
+exists fully in RAM — peak RSS on the real run was ~6.3 GB of mostly-reclaimable memmap page
+cache, not two irreducible live copies. Verified byte-identical to the in-memory path on a small
+real subset before trusting it at scale. The general lesson, not just this run: a stated resource
+budget ("N GB free") answers "does it fit on disk," not "does it fit in the memory model actually
+used to build it" — those are different questions, and this project has no swap to blur the
+difference.
+
+**Leakage constraint is enforced by a test, not just documented.** `tests/test_data_hygiene.py`
+runs against this real 522-scene manifest: a naive `train_test_split` on patch index is shown to
+actually leak at least one scene across train/val (the failure mode, demonstrated, not asserted
+away), and `GroupShuffleSplit(groups=scene_groups(records))` is shown to leak none. This is §12's
+`test_data_hygiene.py` third check (crop-level leakage) — the file didn't exist until this pool
+did, and it's now the thing standing between a future `pool[:1700]`/`pool[1700:]` split and a
+green suite.
+
+**Forward-compat gap, not a bug today.** D16 resolves EnMAP's 8 uncovered canonical bands with a
+per-sensor bad-band mask rather than a raise, and says the pool "still stacks to one
+`[N, 64, 64, 184]` tensor." The cached format built here cannot carry that: the tensor is bare
+float32 with no per-patch validity mask, and `BackgroundPatch` has no `bad_bands` field. Nothing
+is wrong for HAD100 alone — both raw sensors are 0/184 uncovered (D15) — but D16's resolution is
+a *format* change to this cache, not an append, and whoever wires EnMAP into the pool will hit
+that the first time they try.
 
 ---
 
