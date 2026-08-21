@@ -20,7 +20,10 @@ from pathlib import Path
 _HTML_SNIFF = (b"<!doctype", b"<html", b"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!doctype")
 
 MAGIC = {
-    "tiff": (b"II*\x00", b"MM\x00*"),          # little/big endian TIFF, incl. COG
+    # Classic TIFF (42) AND BigTIFF (43). EnMAP L2A ships BOTH: verified
+    # 2026-08-21, 7 of 8 downloaded cubes are BigTIFF (II+\0), 1 is classic
+    # (II*\0). Checking only for 42 rejects every valid BigTIFF product.
+    "tiff": (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+"),
     "zip":  (b"PK\x03\x04",),
     "hdf5": (b"\x89HDF\r\n\x1a\n",),           # .mat v7.3, EnMAP HDF products
     "mat":  (b"MATLAB",),                      # .mat v5

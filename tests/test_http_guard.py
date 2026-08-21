@@ -36,3 +36,15 @@ def test_html_beats_magic_for_message():
 def test_rejects_truncated_non_html():
     with pytest.raises(ValueError, match="not tiff"):
         assert_magic(b"\x00\x00\x00\x00garbage", "tiff")
+
+
+@pytest.mark.parametrize("magic,label", [
+    (b"II*\x00", "classic LE"), (b"MM\x00*", "classic BE"),
+    (b"II+\x00", "BigTIFF LE"), (b"MM\x00+", "BigTIFF BE"),
+])
+def test_accepts_bigtiff_and_classic(magic, label):
+    """EnMAP L2A ships both. Verified 2026-08-21: 7 of 8 cubes were BigTIFF.
+
+    Accepting only classic TIFF rejected every valid ~450 MB EnMAP product.
+    """
+    assert_magic(magic + b"\x00" * 32, "tiff")
