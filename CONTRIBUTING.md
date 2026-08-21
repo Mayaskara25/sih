@@ -44,6 +44,31 @@ The dependency DAG is `plan.md` §11. These branches are unblocked **now**
 | **3D edge** | `profiling`, `constrained_sim` | §3D, §9 | `edge/` is empty. §11 marks these "start immediately". **Power is never reported** — no instrumented hardware |
 | **3E quantum** | `qiskit_basics` → `feature_map` | §3E | `quantum/` is empty |
 
+### Interfaces you must match
+
+**Detectors** (`local_rx`, `kernel_rx`, `crd`, `streaming_rx`). Four people are
+writing these in parallel, so the signature is not negotiable. Follow
+`anomaly/rx.py::global_rx`:
+
+```python
+def <name>(cube: np.ndarray, *, <your params with defaults>) -> np.ndarray:
+    """cube: [H, W, B] float32, NaN = nodata.
+    returns:  [H, W] float32, NaN wherever the input pixel was NaN.
+    """
+```
+
+Rules that apply to all four:
+- **NaN in → NaN out, positionally.** Downstream scoring and masking rely on it.
+- **Never form an explicit inverse.** `global_rx` uses `cho_factor`/`cho_solve`;
+  covariance matrices here are ill-conditioned and `np.linalg.inv` will bite you.
+- **Keyword-only tuning params, all with defaults**, so the eventual Phase 4
+  registry can call any detector uniformly.
+- `streaming_rx` additionally must hold float64 accumulators (Welford/Chan) — see
+  §3A. Single-pass float32 covariance loses precision on 2 088 patches.
+
+Higher raw scores mean more anomalous. Normalization is **not** your job — §3A's
+scoring layer owns it (D3).
+
 **Claimed / do not take:** `3B` (synth → datasets → train_unet) is the critical path
 and actively being worked. So is anything under `preprocessing/`.
 
