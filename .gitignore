@@ -1,0 +1,38 @@
+# --- secrets: never commit ---
+# The real credentials live OUTSIDE this repo (~/.config/sih/credentials.env).
+# These patterns are a second line of defence, not the primary one.
+.env
+.env.*
+!.env.example
+*.secret
+*credentials*
+!docs/*credentials*
+# The pattern above is deliberately broad, but these two are SOURCE, not secrets:
+# credentials.py reads ~/.config/sih/credentials.env, it never contains a value.
+!core/credentials.py
+!scripts/check_credentials.py
+*.pem
+*.key
+.netrc
+
+# --- data: too large, and licence-restricted ---
+data/raw/
+data/processed/
+data/benchmark/
+*.tif
+*.tiff
+*.mat
+*.dat
+*.hdr
+*.zip
+
+# --- environments / caches ---
+.venv/
+.tooling/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# --- scratch: pasted screenshots from chat sessions ---
+Pasted image*.png

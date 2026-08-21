@@ -1,0 +1,14 @@
+# D6 — both profiles maintained, selected by flag. Routing: 3A (anomaly)
+# defaults to "object", 3C (change) defaults to "landcover" -- a config
+# default, not a hardcode; either branch can run under either profile.
+object:
+  postfilter: {min_area_px: 4, max_area_px: 2000, min_solidity: 0.15, max_elongation: 8.0}
+  indices: [ndbi, iron_oxide_ratio, clay_ratio, brightness]
+  validated_on: [abu, hydice_urban_anomaly, had100]
+
+landcover:
+  postfilter: {min_area_px: 50, max_area_px: null, min_solidity: 0.05, max_elongation: 20.0}
+  indices: [ndvi, ndwi, nbr, bsi]
+  validated_on: [sentinel2_timeseries]
+
+default: object

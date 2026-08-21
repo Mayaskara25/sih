@@ -1,0 +1,347 @@
+{
+  "indian_pines": {
+    "files": {
+      "Indian_pines_corrected.mat:indian_pines_corrected": {
+        "shape": [
+          145,
+          145,
+          200
+        ],
+        "dtype": "uint16",
+        "min": 955.0,
+        "max": 9604.0
+      },
+      "Indian_pines_gt.mat:indian_pines_gt": {
+        "shape": [
+          145,
+          145
+        ],
+        "dtype": "uint8",
+        "min": 0.0,
+        "max": 16.0
+      }
+    },
+    "georef_keys": [],
+    "wavelength_keys": [],
+    "has_georef": false
+  },
+  "abu": {
+    "n": 13,
+    "groups": {
+      "airport": 4,
+      "beach": 4,
+      "urban": 5
+    },
+    "scenes": [
+      {
+        "name": "abu-airport-1",
+        "shape": [
+          100,
+          100,
+          205
+        ],
+        "dtype": "uint16",
+        "vmin": 0.0,
+        "vmax": 6604.0,
+        "neg_px": 0,
+        "over_int16": 0,
+        "anom_px": 144,
+        "anom_pct": 1.44,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-airport-2",
+        "shape": [
+          100,
+          100,
+          205
+        ],
+        "dtype": "uint16",
+        "vmin": 0.0,
+        "vmax": 6644.0,
+        "neg_px": 0,
+        "over_int16": 0,
+        "anom_px": 87,
+        "anom_pct": 0.87,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-airport-3",
+        "shape": [
+          100,
+          100,
+          205
+        ],
+        "dtype": "int16",
+        "vmin": -1.0,
+        "vmax": 5651.0,
+        "neg_px": 7,
+        "over_int16": 0,
+        "anom_px": 170,
+        "anom_pct": 1.7,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-airport-4",
+        "shape": [
+          100,
+          100,
+          191
+        ],
+        "dtype": "uint16",
+        "vmin": 1.0,
+        "vmax": 5061.0,
+        "neg_px": 0,
+        "over_int16": 0,
+        "anom_px": 60,
+        "anom_pct": 0.6,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-beach-1",
+        "shape": [
+          150,
+          150,
+          188
+        ],
+        "dtype": "int16",
+        "vmin": -32.0,
+        "vmax": 6593.0,
+        "neg_px": 23411,
+        "over_int16": 0,
+        "anom_px": 19,
+        "anom_pct": 0.0844,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-beach-2",
+        "shape": [
+          100,
+          100,
+          193
+        ],
+        "dtype": "int16",
+        "vmin": -19.0,
+        "vmax": 4100.0,
+        "neg_px": 8462,
+        "over_int16": 0,
+        "anom_px": 202,
+        "anom_pct": 2.02,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-beach-3",
+        "shape": [
+          100,
+          100,
+          188
+        ],
+        "dtype": "int16",
+        "vmin": -34.0,
+        "vmax": 5404.0,
+        "neg_px": 2474,
+        "over_int16": 0,
+        "anom_px": 11,
+        "anom_pct": 0.11,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-beach-4",
+        "shape": [
+          150,
+          150,
+          102
+        ],
+        "dtype": "float64",
+        "vmin": 0.0,
+        "vmax": 1.0,
+        "neg_px": 0,
+        "over_int16": 0,
+        "anom_px": 68,
+        "anom_pct": 0.3022,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-urban-1",
+        "shape": [
+          100,
+          100,
+          204
+        ],
+        "dtype": "int16",
+        "vmin": -50.0,
+        "vmax": 6534.0,
+        "neg_px": 34019,
+        "over_int16": 0,
+        "anom_px": 67,
+        "anom_pct": 0.67,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-urban-2",
+        "shape": [
+          100,
+          100,
+          207
+        ],
+        "dtype": "int16",
+        "vmin": -50.0,
+        "vmax": 14060.0,
+        "neg_px": 45626,
+        "over_int16": 0,
+        "anom_px": 155,
+        "anom_pct": 1.55,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-urban-3",
+        "shape": [
+          100,
+          100,
+          191
+        ],
+        "dtype": "uint16",
+        "vmin": 0.0,
+        "vmax": 7208.0,
+        "neg_px": 0,
+        "over_int16": 0,
+        "anom_px": 52,
+        "anom_pct": 0.52,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-urban-4",
+        "shape": [
+          100,
+          100,
+          205
+        ],
+        "dtype": "int16",
+        "vmin": -2.0,
+        "vmax": 19492.0,
+        "neg_px": 9,
+        "over_int16": 0,
+        "anom_px": 272,
+        "anom_pct": 2.72,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      },
+      {
+        "name": "abu-urban-5",
+        "shape": [
+          100,
+          100,
+          205
+        ],
+        "dtype": "int16",
+        "vmin": -1.0,
+        "vmax": 7120.0,
+        "neg_px": 2,
+        "over_int16": 0,
+        "anom_px": 232,
+        "anom_pct": 2.32,
+        "mask_vals": [
+          0,
+          1
+        ],
+        "wavelength_keys": []
+      }
+    ],
+    "band_counts": {
+      "205": 5,
+      "191": 2,
+      "188": 2,
+      "193": 1,
+      "102": 1,
+      "204": 1,
+      "207": 1
+    },
+    "spatial": {
+      "100x100": 11,
+      "150x150": 2
+    },
+    "dtypes": {
+      "uint16": 4,
+      "int16": 8,
+      "float64": 1
+    },
+    "keysets": [
+      [
+        "data",
+        "map"
+      ]
+    ],
+    "uniform_bands": false
+  },
+  "hydice": {
+    "file": "HYDICE-urban.mat",
+    "shape": [
+      80,
+      100,
+      175
+    ],
+    "dtype": "float64",
+    "value_range": [
+      0.0,
+      1.0
+    ],
+    "anom_px": 21,
+    "n_components": 10,
+    "mask_vals": [
+      0,
+      1
+    ],
+    "wavelength_keys": []
+  },
+  "harmonize_blocker": {
+    "any_dataset_ships_wavelengths": false,
+    "note": "D9 harmonize() interpolates from source wavelengths onto the canonical grid. None of these three ships one."
+  }
+}

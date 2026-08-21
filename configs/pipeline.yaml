@@ -1,0 +1,17 @@
+# Phase 2 walking-skeleton defaults. Stage implementations are named so a
+# Phase 4 swap (e.g. global_rx -> local_rx) is a config edit, not a rewrite.
+detector: global_rx
+threshold_pct: 99.0
+profile: object
+
+normalize:
+  method: standardize   # "standardize" | "l2"
+
+postfilter:
+  open_radius: 1
+  close_radius: 2
+  connectivity: 8
+
+scoring:
+  p_lo: 1.0
+  p_hi: 99.9

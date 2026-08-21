@@ -1,0 +1,4 @@
+data_raw: data/raw
+data_processed: data/processed
+data_benchmark: data/benchmark
+experiments: experiments

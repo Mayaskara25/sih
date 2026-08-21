@@ -1,0 +1,37 @@
+{
+  "scene": "data/benchmark/indian_pines/Indian_pines_corrected.mat",
+  "source": "indian_pines",
+  "detector": "global_rx",
+  "threshold_pct": 99.0,
+  "profile": "object",
+  "normalize_method": "standardize",
+  "git_sha": null,
+  "package_versions": {
+    "numpy": "2.5.2",
+    "scipy": "1.18.0",
+    "rasterio": "1.5.1",
+    "geopandas": "1.1.4",
+    "shapely": "2.1.2",
+    "pyproj": "3.7.2",
+    "scikit-image": "0.26.0"
+  },
+  "timings_s": {
+    "load": 0.07264453100015089,
+    "drop_bad_bands": 2.523999683035072e-06,
+    "standardize": 0.037565896999694814,
+    "detector": 0.12482126199938648,
+    "percentile_normalize": 0.00408278299983067,
+    "threshold": 0.0004533989995252341,
+    "morphology": 0.0016953519998423872,
+    "mask_to_rois": 0.02864680099992256,
+    "save_score_raster": 0.0072415459999319864,
+    "geojson": 0.06713712500004476
+  },
+  "n_rois": 3,
+  "outputs": {
+    "anom_raw": "experiments/phase2/Indian_pines_corrected_anom_raw.tif",
+    "anom_norm": "experiments/phase2/Indian_pines_corrected_anom_norm.tif",
+    "mask": "experiments/phase2/Indian_pines_corrected_mask.tif",
+    "geojson": "experiments/phase2/Indian_pines_corrected_rois.geojson"
+  }
+}

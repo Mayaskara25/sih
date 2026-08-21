@@ -1,0 +1,106 @@
+{
+  "subsets": {
+    "data/aviris_ng_target": {
+      "n": 94,
+      "spatial": {
+        "64x64": 76,
+        "70x70": 2,
+        "75x75": 1,
+        "80x80": 1,
+        "86x81": 1,
+        "100x100": 11,
+        "101x101": 1,
+        "120x120": 1
+      },
+      "distinct_shapes": 8,
+      "min_shape": "64x64",
+      "max_shape": "120x120",
+      "all_64x64": false,
+      "bands": {
+        "425": 94
+      },
+      "interleave": [
+        "bil"
+      ],
+      "dtypes": [
+        4
+      ],
+      "nonmonotonic_wl": "0/94",
+      "crs_present": "94/94",
+      "nodata_sentinels": [
+        -9999.0
+      ]
+    },
+    "data/aviris_ng_normal": {
+      "n": 260,
+      "spatial": {
+        "81x81": 260
+      },
+      "distinct_shapes": 1,
+      "min_shape": "81x81",
+      "max_shape": "81x81",
+      "all_64x64": false,
+      "bands": {
+        "425": 260
+      },
+      "interleave": [
+        "bil"
+      ],
+      "dtypes": [
+        4
+      ],
+      "nonmonotonic_wl": "0/260",
+      "crs_present": "260/260",
+      "nodata_sentinels": [
+        -9999.0,
+        1e-34
+      ]
+    },
+    "data/aviris_normal": {
+      "n": 262,
+      "spatial": {
+        "66x66": 41,
+        "71x71": 11,
+        "71x81": 1,
+        "76x76": 2,
+        "81x81": 205,
+        "91x91": 1,
+        "130x130": 1
+      },
+      "distinct_shapes": 7,
+      "min_shape": "66x66",
+      "max_shape": "130x130",
+      "all_64x64": false,
+      "bands": {
+        "224": 262
+      },
+      "interleave": [
+        "bil",
+        "bip"
+      ],
+      "dtypes": [
+        2,
+        4
+      ],
+      "nonmonotonic_wl": "262/262",
+      "crs_present": "262/262",
+      "nodata_sentinels": [
+        null
+      ]
+    }
+  },
+  "derived": {
+    "test_raw": 94,
+    "crop_dict_keys": 18,
+    "extra_crops": 6,
+    "test_patches": 100,
+    "bg_ng_patches": 1040,
+    "bg_classic_patches": 1048,
+    "bands_after_select": {
+      "aviris_ng": 276,
+      "aviris": 162
+    },
+    "pools_stackable": false,
+    "bg_total_patches": 2088
+  }
+}
