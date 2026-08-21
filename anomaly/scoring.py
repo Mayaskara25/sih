@@ -322,3 +322,80 @@ def spatial_context_score(score: np.ndarray, *, k: int = 7) -> np.ndarray:
 
     out = np.where(valid, context, np.nan)
     return out.astype(np.float32)
+
+
+def calibrate_threshold_for_recall(scores: np.ndarray, labels: np.ndarray, *,
+                                    target_recall: float = 0.98
+                                    ) -> tuple[float, float]:
+    """PLAN.md §4.2 -- recall-first threshold calibration for the cascade.
+
+    Picks the LOWEST threshold achieving `target_recall` on the validation
+    set, and returns `(threshold, false_positive_rate)`.
+
+    Why the lowest, and why deliberate over-triggering is correct here: in a
+    cascade, a stage-1 FALSE POSITIVE costs cheap extra stage-2 compute, but
+    a stage-1 FALSE NEGATIVE is UNRECOVERABLE -- stage 2 never sees that
+    region at all, so no downstream cleverness can recover the miss. The two
+    error types are not symmetric and must not be traded off symmetrically.
+
+    The induced FP rate is RETURNED rather than merely logged, so the compute
+    cost of the recall target is explicit at the call site. A recall target
+    quoted without its FP rate hides how much stage-2 work it just bought;
+    §4.2 requires that number in the run manifest for exactly that reason.
+
+    Parameters
+    ----------
+    scores : array
+        Detector scores. NaN entries are excluded, matching the repo-wide
+        NaN-is-nodata convention -- they are not silently treated as 0, which
+        would place them below every real threshold and count every nodata
+        pixel as a confident negative.
+    labels : array, same shape
+        Boolean/0-1 ground truth; True == target.
+    target_recall : float
+        In (0, 1].
+
+    Returns
+    -------
+    (threshold, fp_rate)
+        `threshold` is such that `scores >= threshold` recalls at least
+        `target_recall` of the positives. If even the minimum score cannot
+        reach the target (i.e. some positives are NaN), the minimum valid
+        score is returned and the achieved recall is below target -- callers
+        that care must check, which is why the FP rate comes back too.
+
+    Raises
+    ------
+    ValueError
+        If `target_recall` is outside (0, 1], shapes disagree, or there are
+        no valid positives -- a threshold calibrated against zero positives
+        is meaningless and returning one would be worse than failing.
+    """
+    if not 0.0 < target_recall <= 1.0:
+        raise ValueError(f"target_recall must be in (0, 1], got {target_recall}")
+    scores = np.asarray(scores)
+    labels = np.asarray(labels)
+    if scores.shape != labels.shape:
+        raise ValueError(f"shape mismatch: scores {scores.shape} vs labels {labels.shape}")
+
+    valid = ~np.isnan(scores)
+    s = scores[valid].astype(np.float64)
+    y = labels[valid].astype(bool)
+
+    n_pos = int(y.sum())
+    if n_pos == 0:
+        raise ValueError("no valid positive labels -- cannot calibrate a recall threshold")
+
+    pos = np.sort(s[y])[::-1]                     # descending
+    # To recall k of n_pos positives, the threshold must sit at or below the
+    # k-th largest positive score. The smallest k meeting the target is
+    # ceil(target_recall * n_pos), computed on integers to avoid a
+    # floating-point off-by-one at exact ratios (e.g. 0.98 * 50 == 48.99999).
+    k = -(-int(round(target_recall * n_pos * 1_000_000)) // 1_000_000)
+    k = max(1, min(k, n_pos))
+    threshold = float(pos[k - 1])
+
+    flagged = s >= threshold
+    n_neg = int((~y).sum())
+    fp_rate = float((flagged & ~y).sum() / n_neg) if n_neg else 0.0
+    return threshold, fp_rate

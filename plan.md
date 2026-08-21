@@ -1213,6 +1213,41 @@ illegitimate reasons. The tuning split must be carved out and named in
 
 ---
 
+### D23 — a scene with zero ROIs crashed the pipeline. Found by the Phase 4 registry test, on the most benign possible input.
+
+`rois_to_geojson([])` raised `ValueError: Unknown column geometry`. `gpd.GeoDataFrame` cannot
+infer a geometry column from an empty record list, so the empty case needed its own path and did
+not have one.
+
+**This is not a hypothetical edge case.** It surfaced while testing §4.1's registry with
+`local_rx(outer=15, inner=3, n_components=12)` on Indian Pines at the 99th percentile: 211 pixels
+survive thresholding and **zero** survive `morphological_cleanup`'s opening, because they are
+scattered singletons. Zero ROIs is the correct answer there. The pipeline's response to the
+correct answer was a traceback.
+
+**Why it matters more than its size suggests.** Phase 5 Level 1 runs **13 ABU + 100 HAD100 + 1
+HYDICE + Indian Pines** unattended, and Phase 7 runs a live scripted demo. A clean scene, a strict
+threshold, or an aggressive post-filter all produce zero ROIs. The failure mode is therefore:
+*the benchmark crashes partway through a 115-scene sweep, on whichever scene happened to be
+cleanest.* And a demo that dies on "found nothing" fails in front of judges on the one input where
+the system is behaving perfectly.
+
+**Fixed** by writing a schema-correct empty `FeatureCollection` by hand rather than through
+`GeoDataFrame`. `validate_geojson` already accepted it — it iterates `features`, so zero features
+passes — and QGIS opens it as an empty layer instead of refusing the file. Regression-tested at
+both levels: the writer directly, and the full pipeline on the detector config that first exposed
+it.
+
+**The pattern worth noting, since this is the fourth of its kind.** D22, D22.1, D22.2 and D23 were
+all found by *integration*, not by unit tests, and all four were invisible to a green suite. The
+suite had 200 passing tests when this bug was live. Unit tests check that a function does what it
+does; they systematically miss the empty case, the extreme case, and the case where two correct
+components disagree about a convention. **The Phase 5 harness should be treated as a bug-finding
+instrument, not merely a reporting one** — it is the first thing in this project that runs every
+detector against every scene, and on this evidence it will find more.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.

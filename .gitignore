@@ -36,3 +36,4 @@ __pycache__/
 
 # --- scratch: pasted screenshots from chat sessions ---
 Pasted image*.png
+.agent_progress/

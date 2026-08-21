@@ -1,6 +1,7 @@
 """PLAN.md §2.8."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -70,7 +71,37 @@ def rois_to_geojson(rois: list[ROIRecord], meta: SceneMeta, out_path: str | Path
             georef=meta.georef,
         ))
 
-    gdf = gpd.GeoDataFrame(records, geometry="geometry", crs="EPSG:4326")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    gdf.to_file(out_path, driver="GeoJSON")
+
+    if records:
+        gdf = gpd.GeoDataFrame(records, geometry="geometry", crs="EPSG:4326")
+        gdf.to_file(out_path, driver="GeoJSON")
+        return out_path
+
+    # A SCENE WITH ZERO ROIs IS A NORMAL OUTCOME, NOT AN ERROR. Building a
+    # GeoDataFrame from an empty record list raises `ValueError: Unknown
+    # column geometry` -- there is no geometry column to name, because there
+    # are no rows to infer one from -- so this path must be written
+    # explicitly rather than falling through to the same constructor.
+    #
+    # This is not a hypothetical. A clean scene, or a strict threshold, or
+    # morphological_cleanup removing scattered single pixels, all produce
+    # zero ROIs: on Indian Pines with local_rx(outer=15) at the 99th
+    # percentile, 211 mask pixels survive thresholding and *none* survive
+    # opening. Phase 5 Level 1 runs 13 ABU + 100 HAD100 scenes and Phase 7
+    # runs a live demo; a crash on "found nothing" would take either down,
+    # and would do so on the most benign input rather than the hardest.
+    #
+    # Written by hand rather than via GeoDataFrame so the output is a valid,
+    # schema-correct, EMPTY FeatureCollection that validate_geojson accepts
+    # (it iterates `features`, so zero features passes) and QGIS opens as an
+    # empty layer rather than refusing the file.
+    empty = {
+        "type": "FeatureCollection",
+        "name": out_path.stem,
+        "crs": {"type": "name",
+                "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"}},
+        "features": [],
+    }
+    out_path.write_text(json.dumps(empty, indent=2))
     return out_path
