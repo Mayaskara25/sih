@@ -96,6 +96,13 @@ Every step below is available today.
    claims `C=30`; that criterion moved to §3B.3.
 
 3. **3B — synth → datasets → train_unet**, on the 2 088 patches.
+   **Background pool BUILT and cached (2026-08-21, D17):** `data/processed/had100_background_pool.npy`
+   — `[2088, 64, 64, 184]` float32, 6.29 GB, sha256-recorded, plus a per-patch manifest CSV.
+   522 unique source scenes, exactly 4 crops each, `scene_groups()` is the one sanctioned way to
+   derive a train/val split from it (patch-index splitting leaks, D11.5). The first build attempt
+   was OOM-killed — this machine has 13 GB RAM / 8.3 GB available / no swap, not just "39 GB
+   free disk" — fixed with a disk-backed memmap; see D17 before assuming disk space is the binding
+   constraint on any similarly-sized build.
    Enforce scene-level, spectrum-level and crop-level leakage control (§3B).
 
 4. **In parallel, no dependencies** (§11 "start immediately"):

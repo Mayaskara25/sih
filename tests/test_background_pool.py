@@ -10,9 +10,11 @@ from preprocessing.background_pool import (
     BackgroundPatch,
     RETAINED_BANDS,
     build_background_pool,
+    build_background_pool_to_disk,
     four_corner_offsets,
     harmonize_and_crop_scene,
     save_pool,
+    save_pool_manifest,
     scene_groups,
 )
 from preprocessing.harmonize import harmonize
@@ -152,6 +154,45 @@ def test_build_background_pool_stacks_ng_and_classic(tmp_path, monkeypatch):
     assert sum(1 for r in records if r.sensor == "aviris") == 8
     assert [r.array_index for r in records] == list(range(16))
     assert len(np.unique(scene_groups(records))) == 4
+
+
+@pytest.mark.skipif(not _have_had100, reason="HAD100 not fetched")
+def test_build_background_pool_to_disk_matches_in_memory(tmp_path):
+    """The memmap-backed path (used for the real 522-scene build, since the
+    in-memory path OOM-killed on this machine's 8.3 GB-available/no-swap
+    setup) must produce byte-identical output to the in-memory path."""
+    fake_root = tmp_path / "HAD100"
+    ng_dir = fake_root / "data" / "aviris_ng_normal"
+    classic_dir = fake_root / "data" / "aviris_normal"
+    ng_dir.mkdir(parents=True)
+    classic_dir.mkdir(parents=True)
+
+    real_ng_dir = HAD100_ROOT / "data" / "aviris_ng_normal"
+    real_classic_dir = HAD100_ROOT / "data" / "aviris_normal"
+    ng_hdrs = sorted(real_ng_dir.glob("*.hdr"))[:2]
+    classic_hdrs = sorted(real_classic_dir.glob("*.hdr"))[:2]
+    for hdr in ng_hdrs:
+        (ng_dir / hdr.name).symlink_to(hdr)
+        (ng_dir / hdr.with_suffix(".dat").name).symlink_to(hdr.with_suffix(".dat"))
+    for hdr in classic_hdrs:
+        (classic_dir / hdr.name).symlink_to(hdr)
+        (classic_dir / hdr.with_suffix(".dat").name).symlink_to(hdr.with_suffix(".dat"))
+
+    in_memory_pool, in_memory_records = build_background_pool(fake_root)
+
+    pool_path = tmp_path / "out" / "pool.npy"
+    disk_records = build_background_pool_to_disk(fake_root, pool_path)
+    disk_pool = np.load(pool_path)
+
+    np.testing.assert_array_equal(disk_pool, in_memory_pool)
+    assert [r.__dict__ for r in disk_records] == [r.__dict__ for r in in_memory_records]
+
+    summary = save_pool_manifest(disk_records, pool_path, tmp_path / "out")
+    assert summary["shape"] == [16, 64, 64, RETAINED_BANDS]
+    assert summary["n_ng_scenes"] == 2
+    assert summary["n_classic_scenes"] == 2
+    with open(tmp_path / "out" / "had100_background_manifest.csv") as f:
+        assert len(f.readlines()) == 17   # header + 16 patches
 
 
 @pytest.mark.skipif(not _have_had100, reason="HAD100 not fetched")

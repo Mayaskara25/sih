@@ -902,6 +902,122 @@ is wrong for HAD100 alone — both raw sensors are 0/184 uncovered (D15) — but
 a *format* change to this cache, not an append, and whoever wires EnMAP into the pool will hit
 that the first time they try.
 
+### D19 — §3B built (2026-08-21): `synth.py` → `datasets.py` → `train_unet.py`. `unet_all_real` in §3B.8's table has the same missing-wavelength problem as the two rows already marked suspended — it just wasn't marked.
+
+**Built:** `segmentation/synth.py` (`implant_targets` — linear mixing `m = a*t + (1-a)*s`,
+abundance sweep, exact/free masks, provenance metadata; `pseudo_anomaly_patch` — 4-kind
+self-supervised pretext task with no `target_spectra` parameter at all, so the zero-prior
+property is structural, not just documented), `segmentation/datasets.py` (`train_val_scene_split`
+— `GroupShuffleSplit` keyed on `scene_groups()`, never patch index, per D11.5;
+`fit_reduce_bands_transformer` — streams the TRAIN split only from the memmap, bounded pixel
+sample, never touches val/eval, closing the D15 leakage gap `reduce_bands` was deferred out of
+§3A.1 for; `SyntheticSegDataset` / `RealSegDataset`, the latter asserting `split == "eval"` so
+training on real GT is a structural error, not a discipline problem, per D7), and
+`segmentation/train_unet.py` (`LightUNet`, ~1.9M params, `combined_loss` = 0.5 BCE + 0.5 Dice per
+§3B.4). 94→126 tests, all passing; `pytest` and both `verify_had100.py`/`verify_benchmarks.py`
+clean before and after.
+
+**Two real findings from execution, not from re-reading the plan:**
+
+**1. PCA output scale.** `reduce_bands`'s PCA on raw radiance-scale HAD100 patches (not
+reflectance) produces components in the thousands (observed range roughly −6500 to +8 across a
+real patch) — numerically unsafe for fp16 and borderline even at fp32. Fixed by standardizing
+(per-band zero-mean/unit-variance, `preprocessing/normalize.py`) the reduced cube before it
+reaches the model, in both `SyntheticSegDataset` and `RealSegDataset`. Not previously stated
+anywhere in §3B — `reduce_bands` itself does no scale normalization by design (D15 only specifies
+*where* it's fit, not output scale), and nothing upstream of it happens to produce reflectance-
+scale data, so this bites in `datasets.py`, not `harmonize.py`.
+
+**2. AMP is currently unsafe on this machine's GPU — `train_unet`'s `amp` default is now
+`False`, not §3B.4's stated "AMP fp16."** Under `torch.autocast`, `LightUNet`'s `dec2` Conv2d
+produces NaN from a fresh forward pass on fp32-clean input, on this exact stack (GTX 1650, cuDNN
+9.2.0, torch 2.13.0+cu130). Isolated by layer-by-layer forward inspection, then confirmed with
+`torch.backends.cudnn.enabled = False`, which makes the NaN disappear — consistent with a cuDNN
+fp16 kernel issue on this GPU/driver stack, though a genuine fp16-range/accumulation limitation in
+that same kernel path reads the evidence equally well; the fix is identical either way.
+`cudnn.benchmark = True` only masks it for the first few calls (0/20 clean iterations in a real
+optimizer loop once the algorithm cache settles). fp32 training is fully stable (0/30 NaN) and
+uses ~244 MB VRAM at batch=16 — nowhere near the 4 GB budget (D8), so disabling AMP costs nothing
+here. Pinned as a permanent regression test, `test_amp_is_currently_unsafe_on_this_gpu` in
+`tests/test_train_unet_real_gpu.py` — if a future driver/cuDNN update makes it start failing
+(no more NaN), that's the signal to reconsider the default.
+
+**This is a live concern for §3B.5 (SegFormer, not yet built).** D8 sizes that arm as "batch 8 +
+grad-accum 2 + AMP at 4 GB" — i.e. it assumes AMP works to fit the budget. That assumption is now
+unverified on this hardware, not confirmed-and-forgotten. Whoever builds §3B.5 should re-run this
+same isolation (autocast on → layer-by-layer NaN check → `cudnn.enabled = False` control) against
+SegFormer specifically before trusting AMP there, and if it reproduces, re-derive whether
+fp32 SegFormer actually fits in 4 GB before committing to that arm's batch size.
+
+**A plan gap, found while implementing `synth.py`'s `load_target_spectra`, not previously
+written down anywhere.** §3B.8's table (line ~1779) lists `unet_all_real`'s spectra provenance as
+`lib`+`abu_real`+`hyd_real` and marks it **scoreable on had100/test only** — with no suspension
+note, unlike `unet_lodo_abu`/`unet_lodo_hyd` immediately above it. But `abu_real` and `hyd_real`
+mean *real target pixel spectra pulled from the ABU/HYDICE GT masks* (§3B.7, line ~1637), and
+implanting a target spectrum into a canonically-harmonized 184-band background patch requires
+that spectrum to be on the same 184-band grid — which requires a wavelength array to harmonize
+it. ABU and HYDICE ship no wavelength arrays at all (D13.4/O8). This is the *same* underlying
+constraint that suspended the two LODO rows, just biting on the training-input side instead of
+the scoring side — O8 being "decided" (score learned models on HAD100 only) did not also resolve
+the training-input question, and O9 (wavelength recovery) is what would. `synth.py`'s
+`load_target_spectra("abu_real")` / `("hyd_real")` therefore raise `NotImplementedError` right
+now, pending O9, exactly like the LODO rows' scoring path — `unet_all_real` is equally suspended
+and the table should say so. This was decided without stopping for user sign-off, on the
+reasoning that it's mechanically forced by O8/D13.4, already-accepted project constraints, not a
+new judgement call; flagged here for the same reason D-entries exist at all, so a later reader
+doesn't have to re-derive it. §3B.8's table (line 1779) and its "suspended, not deleted" paragraph
+(lines 1783–1787) should be updated to include `unet_all_real` alongside the two LODO rows —
+not done as part of this entry, since editing that section is a §3B.8 change and this entry only
+records the finding; see the table edit alongside this one.
+
+---
+
+### D20 — `fuse_scores` cannot run its 4-component form on ABU, and §3A.9's accept criterion is written against a scoring set that can only support 3. Same root cause as O8/D13.4, third surface.
+
+**The collision, in four lines already in this plan:**
+
+1. §3A.8 — `spectral_index_score` selects bands "by nearest wavelength via `preprocessing/bands.py` — **never by band index**, which differs per sensor."
+2. D13.4 / O8 — ABU, HYDICE and Indian Pines ship **no wavelength array**. HAD100 is the only benchmark that does.
+3. §3A.9 — default weights are `{rx: 0.40, ace: 0.25, index: 0.15, spatial: 0.20}`.
+4. §3A.9 accept — "fused AUC ≥ best single component on **≥ 10 of 13 ABU scenes**."
+
+So the accept criterion is evaluated on the one dataset where one of its four components is
+structurally unavailable. An agent handed §3A.9 unamended has exactly two moves, and **both are
+wrong**: hardcode ABU band indices (violating §3A.8's explicit prohibition, and silently, because
+a wrong-index NDBI still returns a plausible-looking float array), or stall on a P0 task.
+
+**Decision — fusion is component-adaptive, and the component set is reported beside every number.**
+
+`fuse_scores` takes whatever components it is given, renormalizes the weights of the components
+actually present to sum to 1.0, and records the active component set in its output metadata. It
+does **not** silently substitute a zero raster for a missing component: a zero-filled `index`
+channel after rank-normalization is not "no information", it is a constant that drags every
+fused score toward the same value and would quietly damage the ranking the AUC is computed from.
+
+| scoring set | wavelengths | components | weights |
+|---|---|---|---|
+| **HAD100** (100 test patches) | real, verified (D11) | `rx` · `ace` · `index` · `spatial` | the §3A.9 defaults, unchanged |
+| **ABU** (13), **HYDICE** (1), **Indian Pines** | none (D13.4) | `rx` · `ace` · `spatial` | renormalized: `rx 0.50 · ace 0.3125 · spatial 0.25` |
+
+**§3A.9's accept criterion is amended** to: fused AUC ≥ best single component on ≥ 10 of 13 ABU
+scenes **for the 3-component fusion**, and the table says `fusion(rx+ace+spatial)` in the method
+column — never bare "fusion", which would read as the 4-component detector and overstate what was
+tested. The 4-component form is accepted separately on HAD100.
+
+**Why not just score fusion on HAD100 only, like the learned models?** Because the RX family and
+CRD are scored on all 13 ABU scenes (§3B.8's classical row), and fusion's whole claim is that it
+beats its own best component. Dropping it to HAD100 would compare fusion against a *different*
+scene set than the baselines it claims to beat, which is the §3E.2 error — measuring the basis,
+not the model — in a different costume. Keeping ABU with a declared 3-component set preserves the
+like-for-like comparison, and the missing component is disclosed rather than hidden.
+
+**This is the third surface of one root cause.** O8 hit it on the learned-model *scoring* side.
+D19 hit it on the learned-model *training-input* side. D20 hits it on the *classical fusion*
+side. All three resolve automatically if **O9** recovers per-sensor wavelengths; none of them is
+independently fixable. A fourth surface should be assumed to exist until someone looks: the rule
+is that **any module that selects bands by wavelength is unavailable on ABU/HYDICE/Indian Pines**,
+and that is a property of the datasets, not of the module.
+
 ---
 
 ## 2. Frozen Contracts v1.0
@@ -1776,15 +1892,19 @@ on the canonical grid. ABU and HYDICE remain full scoring sets for the **classic
 | `unet_pretext` | learned | synthetic pretext | *none* | **had100/test only** |
 | `unet_lodo_abu` | learned | synthetic implanted | `lib`+`hyd_real` | — *(suspended, see below)* |
 | `unet_lodo_hyd` | learned | synthetic implanted | `lib`+`abu_real` | — *(suspended, see below)* |
-| `unet_all_real` | learned | synthetic implanted | `lib`+`abu_real`+`hyd_real` | **had100/test only** |
+| `unet_all_real` | learned | synthetic implanted | `lib`+`abu_real`+`hyd_real` | — *(suspended, see below)* |
 | `segformer_*` | learned | *(same five)* | *(same five)* | *(same five)* |
 | `global_rx` · `local_rx` · `kernel_rx` · `crd` | **classical** | *(none — unsupervised)* | *n/a* | **abu (13) · hydice_urban_anomaly (1) · had100/test (100)** |
 
-**The two LODO rows are suspended, not deleted.** `unet_lodo_abu` exists to be scored on ABU and
-`unet_lodo_hyd` on HYDICE; with O8 in force neither has a legal scoring set, so training them
-would produce a model with nowhere to report. They stay in the table, marked suspended, and
-return automatically if **O9** recovers wavelengths. Deleting them would hide that the LODO
-design was cut down by a data limitation rather than by choice.
+**All three real-spectra rows are suspended, not deleted.** `unet_lodo_abu` exists to be scored
+on ABU and `unet_lodo_hyd` on HYDICE; with O8 in force neither has a legal scoring set, so
+training them would produce a model with nowhere to report. `unet_all_real` is suspended for a
+related but distinct reason (D19): its *training* input needs `abu_real`/`hyd_real` target
+spectra pulled from the ABU/HYDICE GT masks, and implanting those into a canonically-harmonized
+background patch needs a wavelength array to put them on the same 184-band grid — which ABU and
+HYDICE don't ship (D13.4). Same root cause as O8, different side of the pipeline. All three stay
+in the table, marked suspended, and return automatically if **O9** recovers wavelengths. Deleting
+them would hide that the design was cut down by a data limitation rather than by choice.
 
 **What this costs, stated plainly:** §3B.5b's leave-one-dataset-out matrix collapses from five
 arms to three, and the cross-sensor generalization claim — train on synthetic, score on three

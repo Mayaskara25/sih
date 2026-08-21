@@ -22,11 +22,13 @@ OUT_DIR = ROOT / "data" / "processed"
 
 def main() -> int:
     sys.path.insert(0, str(ROOT))
-    from preprocessing.background_pool import build_background_pool, save_pool
+    from preprocessing.background_pool import build_background_pool_to_disk, save_pool_manifest
 
     if not HAD100_ROOT.exists():
         print(f"MISSING: {HAD100_ROOT} -- run the fetcher first", file=sys.stderr)
         return 2
+
+    pool_path = OUT_DIR / "had100_background_pool.npy"
 
     t0 = time.time()
     n_done = 0
@@ -37,13 +39,17 @@ def main() -> int:
         if n_done % 100 == 0:
             print(f"  {n_done}/522 scenes ({sensor}: {hdr_path.name})", file=sys.stderr)
 
-    pool, records = build_background_pool(HAD100_ROOT, progress=progress)
+    # Written incrementally via a preallocated memmap -- the pool (6.29 GB)
+    # never exists fully in RAM. An earlier in-memory version (list of
+    # per-scene arrays + np.concatenate's copy, ~2x peak) was OOM-killed on
+    # this machine's 8.3 GB available / no swap.
+    records = build_background_pool_to_disk(HAD100_ROOT, pool_path, progress=progress)
     elapsed = time.time() - t0
-    print(f"harmonized + cropped {len(records) // 4} scenes -> {pool.shape[0]} patches "
+    print(f"harmonized + cropped {len(records) // 4} scenes -> {len(records)} patches "
           f"in {elapsed:.1f}s")
 
-    summary = save_pool(pool, records, OUT_DIR)
-    print(f"wrote {OUT_DIR / 'had100_background_pool.npy'} "
+    summary = save_pool_manifest(records, pool_path, OUT_DIR)
+    print(f"wrote {pool_path} "
           f"({summary['size_bytes'] / 1e9:.2f} GB, sha256 {summary['sha256'][:16]}...)")
     print(f"wrote {OUT_DIR / 'had100_background_manifest.csv'} ({summary['n_patches']} rows)")
 

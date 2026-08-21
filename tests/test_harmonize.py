@@ -243,3 +243,81 @@ def test_harmonize_nan_propagates_only_to_target_bands_touching_the_nan_source_b
     assert nan_out.any(), "expected at least one NaN target band"
     assert not nan_out.all(), "expected NOT every target band to go NaN (would mean whole-pixel assumption)"
     np.testing.assert_array_equal(nan_out, touches_poison)
+
+
+# --- reduce_bands (§3B.3): PCA/kPCA, fit_on-driven refit-vs-transform-only --
+
+def _rng_cube(seed, h=6, w=6, b=harmonize.RETAINED_BANDS):
+    rng = np.random.default_rng(seed)
+    return rng.normal(size=(h, w, b)).astype(np.float32)
+
+
+def test_reduce_bands_output_shape():
+    cube = _rng_cube(0)
+    out, transformer = harmonize.reduce_bands(cube, n_components=5)
+    assert out.shape == (6, 6, 5)
+    assert out.dtype == np.float32
+    assert hasattr(transformer, "transform")
+
+
+def test_reduce_bands_fit_on_external_pixel_pool():
+    fit_pool = np.random.default_rng(1).normal(
+        size=(500, harmonize.RETAINED_BANDS)).astype(np.float32)
+    cube = _rng_cube(2)
+    out, transformer = harmonize.reduce_bands(cube, n_components=5, fit_on=fit_pool)
+    assert out.shape == (6, 6, 5)
+    np.testing.assert_allclose(transformer.mean_, fit_pool.mean(axis=0), rtol=1e-4)
+
+
+def test_reduce_bands_with_prefit_transformer_does_not_refit():
+    """fit_on=<already-fitted transformer> must transform-only. Verified by
+    fitting once on pool A, then calling reduce_bands with a DIFFERENT pool
+    B's cube passed as fit_on's ndarray-branch companion -- if it silently
+    refit, the transformer's mean_ would shift to reflect the new cube."""
+    pool_a = np.random.default_rng(3).normal(
+        loc=0.0, size=(500, harmonize.RETAINED_BANDS)).astype(np.float32)
+    _out_a, transformer = harmonize.reduce_bands(_rng_cube(4), n_components=5, fit_on=pool_a)
+    mean_after_first_fit = transformer.mean_.copy()
+
+    cube_b = np.random.default_rng(5).normal(
+        loc=1000.0, size=(6, 6, harmonize.RETAINED_BANDS)).astype(np.float32)
+    _out_b, transformer_returned = harmonize.reduce_bands(
+        cube_b, n_components=5, fit_on=transformer)
+
+    assert transformer_returned is transformer
+    np.testing.assert_array_equal(transformer.mean_, mean_after_first_fit)
+
+
+def test_reduce_bands_nan_pixels_stay_nan_and_transformer_never_sees_them():
+    fit_pool = np.random.default_rng(6).normal(
+        size=(500, harmonize.RETAINED_BANDS)).astype(np.float32)
+    cube = _rng_cube(7)
+    cube[2, 3, :] = np.nan
+    out, _transformer = harmonize.reduce_bands(cube, n_components=5, fit_on=fit_pool)
+    assert np.all(np.isnan(out[2, 3]))
+    assert not np.any(np.isnan(np.delete(out.reshape(-1, 5), 2 * 6 + 3, axis=0)))
+
+
+def test_reduce_bands_reconstruction_error_under_2_percent_on_held_out_pixels():
+    """§3A.1's original accept criterion (moved to §3B.3, D15): a fit/transform
+    round-trip on held-out pixels reconstructs with < 2% mean relative error
+    at n_components=30. Structured (low-rank + small noise) data, since truly
+    random 184-band noise has no 30-dim structure to recover."""
+    rng = np.random.default_rng(8)
+    n, b, rank = 4000, harmonize.RETAINED_BANDS, 20
+    basis = rng.normal(size=(rank, b))
+    loadings = rng.normal(size=(n, rank))
+    data = (loadings @ basis).astype(np.float32) + rng.normal(scale=0.01, size=(n, b)).astype(np.float32)
+
+    fit_data, held_out = data[:3000], data[3000:]
+    cube = held_out.reshape(1, -1, b)
+    reduced, transformer = harmonize.reduce_bands(cube, n_components=30, fit_on=fit_data)
+
+    reconstructed = transformer.inverse_transform(reduced.reshape(-1, 30))
+    rel_error = np.abs(reconstructed - held_out) / (np.abs(held_out) + 1e-8)
+    assert rel_error.mean() < 0.02
+
+
+def test_reduce_bands_rejects_unknown_method():
+    with pytest.raises(ValueError):
+        harmonize.reduce_bands(_rng_cube(9), n_components=5, method="bogus")

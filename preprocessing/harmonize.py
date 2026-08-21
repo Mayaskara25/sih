@@ -211,3 +211,53 @@ def harmonize(cube: np.ndarray, meta: SceneMeta, *, target_wl: np.ndarray = CANO
     )
     validate_scene(out, new_meta)
     return out, new_meta
+
+
+def reduce_bands(cube: np.ndarray, *, n_components: int = 30, method: str = "pca",
+                  fit_on: np.ndarray | object | None = None) -> tuple[np.ndarray, object]:
+    """PCA/kPCA band reduction, RETAINED_BANDS (184) -> n_components. Never
+    called from harmonize() itself -- fitting requires knowing which pixels
+    are the TRAIN split, and harmonize() runs per-scene, before any split
+    exists. This is called from segmentation/datasets.py, behind the split
+    (D15's amendment: fitting on the whole pool leaks scoring-scene spectral
+    statistics into the representation every model is built on).
+
+    fit_on:
+      - None: fit fresh on `cube`'s own valid (non-NaN) pixels. Only for a
+        one-off transform where sharing a basis across scenes doesn't matter.
+      - ndarray [N, B]: fit fresh on this external pixel pool -- e.g. a
+        bounded random subsample of the TRAIN split's background patches
+        (§3B.3) -- then transform `cube`. This is the call whose returned
+        transformer gets pickled to data/processed/.
+      - an object with .transform (an already-fitted transformer, e.g.
+        unpickled): applied to `cube` WITHOUT refitting. This is what every
+        other split/scene (eval, val, real scoring) must use. "Refitting at
+        inference is a bug" (§3A.1) is enforced structurally here, not just
+        documented: passing the loaded transformer takes this branch and
+        never calls .fit again.
+
+    Returns ([H, W, n_components] float32, the transformer). NaN input
+    pixels stay NaN in the output; the transformer never sees a NaN row.
+    """
+    h, w, b = cube.shape
+    flat = cube.reshape(-1, b)
+    valid = ~np.any(np.isnan(flat), axis=-1)
+
+    if fit_on is not None and hasattr(fit_on, "transform"):
+        transformer = fit_on
+    else:
+        if method == "pca":
+            from sklearn.decomposition import PCA
+            transformer = PCA(n_components=n_components)
+        elif method == "kpca":
+            from sklearn.decomposition import KernelPCA
+            transformer = KernelPCA(n_components=n_components, kernel="rbf")
+        else:
+            raise ValueError(f"unknown method {method!r}, expected 'pca' or 'kpca'")
+        fit_data = fit_on if fit_on is not None else flat[valid]
+        transformer.fit(fit_data)
+
+    out_flat = np.full((flat.shape[0], n_components), np.nan, dtype=np.float32)
+    if valid.any():
+        out_flat[valid] = transformer.transform(flat[valid]).astype(np.float32)
+    return out_flat.reshape(h, w, n_components), transformer

@@ -42,6 +42,7 @@ import numpy as np
 from preprocessing.harmonize import RETAINED_BANDS, harmonize
 from preprocessing.raster_loader import load_scene
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PATCH_SIZE = 64
 
 # Sensor -> raw-ENVI background subdirectory under HAD100/data/ (D11.1).
@@ -49,6 +50,16 @@ SENSOR_DIRS = {
     "aviris_ng": "aviris_ng_normal",
     "aviris": "aviris_normal",
 }
+
+
+def _repo_relative(path: Path) -> str:
+    """Manifest provenance as a repo-relative path where possible, so the
+    manifest stays valid if the repo is moved or checked out elsewhere --
+    an absolute path baked into 2088 rows is brittle provenance."""
+    try:
+        return str(Path(path).resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def four_corner_offsets(h: int, w: int) -> dict[int, tuple[int, int]]:
@@ -100,7 +111,8 @@ def harmonize_and_crop_scene(hdr_path: Path, *, sensor: str
         patches[idx] = harmonized[r0:r0 + PATCH_SIZE, c0:c0 + PATCH_SIZE]
         records.append(BackgroundPatch(
             patch_id=f"{new_meta.scene_id}_{idx}", scene_id=new_meta.scene_id, sensor=sensor,
-            crop_index=idx, row_offset=r0, col_offset=c0, source_path=str(hdr_path),
+            crop_index=idx, row_offset=r0, col_offset=c0,
+            source_path=_repo_relative(hdr_path),
             array_index=0,
         ))
     return patches, records
@@ -186,20 +198,7 @@ def scene_groups(records: list[BackgroundPatch]) -> np.ndarray:
     return np.array([r.scene_id for r in records])
 
 
-def save_pool(pool: np.ndarray, records: list[BackgroundPatch], out_dir: Path) -> dict:
-    """Writes the tensor, a per-patch manifest CSV, and a summary JSON
-    (counts, shape, sha256, build date) for provenance -- the same pattern
-    scripts/fetch_*.py use for downloaded data, applied to a derived one."""
-    import hashlib
-
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    tensor_path = out_dir / "had100_background_pool.npy"
-    manifest_path = out_dir / "had100_background_manifest.csv"
-    summary_path = out_dir / "had100_background_pool_summary.json"
-
-    np.save(tensor_path, pool)
-
+def _write_manifest(records: list[BackgroundPatch], manifest_path: Path) -> None:
     fieldnames = list(BackgroundPatch.__dataclass_fields__)
     with open(manifest_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -207,19 +206,67 @@ def save_pool(pool: np.ndarray, records: list[BackgroundPatch], out_dir: Path) -
         for r in records:
             writer.writerow(asdict(r))
 
+
+def _sha256_of_file(path: Path) -> str:
+    import hashlib
+
     sha256 = hashlib.sha256()
-    with open(tensor_path, "rb") as f:
+    with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             sha256.update(chunk)
+    return sha256.hexdigest()
 
+
+def _summarize(records: list[BackgroundPatch], shape: tuple, dtype, sha256_hex: str) -> dict:
     n_ng = sum(1 for r in records if r.sensor == "aviris_ng")
     n_classic = sum(1 for r in records if r.sensor == "aviris")
-    summary = dict(
-        shape=list(pool.shape), dtype=str(pool.dtype),
+    return dict(
+        shape=list(shape), dtype=str(dtype),
         n_patches=len(records), n_ng_patches=n_ng, n_classic_patches=n_classic,
         n_ng_scenes=n_ng // 4, n_classic_scenes=n_classic // 4,
-        size_bytes=int(pool.nbytes), sha256=sha256.hexdigest(),
+        size_bytes=int(np.prod(shape) * np.dtype(dtype).itemsize), sha256=sha256_hex,
         built=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
+
+
+def save_pool(pool: np.ndarray, records: list[BackgroundPatch], out_dir: Path) -> dict:
+    """Writes the tensor, a per-patch manifest CSV, and a summary JSON
+    (counts, shape, sha256, build date) for provenance -- the same pattern
+    scripts/fetch_*.py use for downloaded data, applied to a derived one.
+
+    For an in-memory pool (build_background_pool / tests). At full scale, use
+    build_background_pool_to_disk + save_pool_manifest instead -- this
+    function's np.save holds the whole tensor in RAM to write it."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tensor_path = out_dir / "had100_background_pool.npy"
+    manifest_path = out_dir / "had100_background_manifest.csv"
+    summary_path = out_dir / "had100_background_pool_summary.json"
+
+    np.save(tensor_path, pool)
+    _write_manifest(records, manifest_path)
+    summary = _summarize(records, pool.shape, pool.dtype, _sha256_of_file(tensor_path))
+    summary_path.write_text(json.dumps(summary, indent=2))
+    return summary
+
+
+def save_pool_manifest(records: list[BackgroundPatch], pool_path: Path, out_dir: Path) -> dict:
+    """Companion to build_background_pool_to_disk: the tensor is already on
+    disk at pool_path (written incrementally, never fully in RAM), so this
+    only writes the manifest CSV + summary JSON, reading the tensor's
+    shape/dtype via memmap (no full load) and streaming it for the sha256."""
+    pool_path = Path(pool_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = out_dir / "had100_background_manifest.csv"
+    summary_path = out_dir / "had100_background_pool_summary.json"
+
+    _write_manifest(records, manifest_path)
+
+    mmapped = np.load(pool_path, mmap_mode="r")
+    shape, dtype = mmapped.shape, mmapped.dtype
+    del mmapped
+
+    summary = _summarize(records, shape, dtype, _sha256_of_file(pool_path))
     summary_path.write_text(json.dumps(summary, indent=2))
     return summary
