@@ -1087,6 +1087,92 @@ project has checked against a real file, is precisely the D11/D13 mistake.
 
 ---
 
+### D22 — `global_rx` raises `LinAlgError` on 3 of 13 ABU scenes. The ridge is an **absolute** constant against data whose covariance diagonals run 1e4–1e6, so it regularizes nothing. Found by integration, not by any unit test, and both tests and pipeline were structurally incapable of finding it.
+
+Found 2026-08-22 while smoke-testing `fuse_scores` against a real detector on a real scene —
+i.e. by wiring two finished components together, which is the first thing neither component's own
+test suite does.
+
+**The failure.** `global_rx(cube)` on the raw benchmark cube:
+
+| | scenes |
+|---|---|
+| `LinAlgError` from `cho_factor` | `abu-beach-1` · `abu-urban-3` · `abu-urban-4` |
+| ok | the other 10 |
+| ok after `standardize(cube)` | **all 13** |
+
+**The cause.** `sigma = sigma + reg * np.eye(b)` with `reg=1e-6`. ABU ships native radiance
+(`max` 4 100–19 492 across the 13 scenes, D13.2), so covariance diagonals run ~1e4–1e6 and a 1e-6
+absolute ridge sits **ten to twelve orders of magnitude** below the quantity it is supposed to
+condition. It is not a weak regularizer; it is arithmetically absent. Cholesky then fails on
+exactly the scenes whose covariance is closest to singular.
+
+This is the *same root cause* the agent building §3A.2 reported independently and correctly as an
+aside: `local_rx`'s pinned `reg=1e-4` is "numerically inert at ABU's native radiance scale." Two
+observers, two modules, one bug — **every detector in this repo takes an absolute `reg` and every
+one of them is scale-blind.** Treat that as the finding, not the three crashing scenes.
+
+**The fix — make the ridge scale-relative:** `reg * (trace(sigma) / b) * I`, so `reg` means "a
+fraction of mean band variance" rather than "this many units of whatever the sensor happened to
+record in." Verified across all 13:
+
+- all three `LinAlgError` scenes now score, at AUC **0.9800 / 0.9523 / 0.9880** — these were not
+  marginal scenes with unstable numbers, they were three of the *strongest* results in the set,
+  and the benchmark was silently unable to report any of them;
+- the 10 already-working scenes move by **< 0.006 AUC** (largest single change 0.0049 on
+  `abu-beach-4`), so this is not a numbers-changing intervention dressed as a bug fix.
+
+**Why nothing caught it, which is the part worth keeping.** Three independent guards all missed
+it for the same structural reason:
+
+1. `test_rx.py` scores Indian Pines and synthetic cubes. Indian Pines happens to be conditioned
+   well enough to pass. Synthetic data is generated at unit scale, where an absolute `reg=1e-6`
+   is a perfectly sensible number — **the fixture's scale hid the bug the fixture existed to find.**
+2. `run_pipeline` calls `standardize` *before* the detector, so the operational path never sees
+   native scale. The pipeline is not wrong; it is immune, which is worse, because it means
+   end-to-end green says nothing about detector robustness.
+3. §3A.10 / Phase 5 L1 call detectors **directly** on native-scale benchmark scenes — that is the
+   whole point of a detector benchmark. So the one consumer that would have hit this is the one
+   that had not been built yet.
+
+**Consequence for the Phase 5 L1 harness, which must be honoured when it is written:** the harness
+decides, per detector, whether it standardizes first, and **records that choice beside every
+number**. Two detectors compared across different input scalings are not comparable, for the same
+reason §3E.2 gives about feature bases. Standardizing is not automatically the right default
+either — RX on standardized data is a different estimator from RX on radiance, and the literature
+AUCs this project will be compared against are mostly the latter.
+
+---
+
+### D22.1 — §3A.9's default fusion weights lose to the best single component on 3 of the first 4 ABU scenes. The grid search is load-bearing, not decorative.
+
+Measured in the same session, `fuse_scores` with the §3A.9 defaults (renormalized 3-component per
+D20, since ABU has no wavelengths):
+
+| scene | local_rx | ace | spatial | **fused** | fused ≥ best? |
+|---|---|---|---|---|---|
+| `abu-airport-1` | 0.9647 | 0.7807 | 0.7881 | 0.9354 | **no** |
+| `abu-airport-2` | 0.8959 | 0.7535 | 0.7843 | 0.8822 | **no** |
+| `abu-airport-3` | 0.9142 | 0.6308 | 0.9180 | 0.9040 | **no** |
+| `abu-airport-4` | 0.9271 | 0.8692 | 0.8230 | **0.9580** | yes |
+
+This is not a bug in `fuse_scores` — the arithmetic is right and the components are correctly
+rank-normalized before weighting. It is the defaults: `ace` and `spatial` score ~0.63–0.87 while
+`local_rx` scores ~0.90–0.96, and the two weak components jointly carry **53%** of the weight,
+so they dilute the strong one. §3A.9's accept criterion ("fused AUC ≥ best single component on
+≥ 10 of 13") is **not met by the stated defaults** and would not be met by tuning them gently.
+
+§3A.9 already says the weights are "tuned by grid search on an ABU validation split; the tuning
+split is recorded and NEVER reused for reporting." That sentence now has teeth: the sweep is the
+only thing standing between the plan's headline fusion claim and a table where fusion loses to
+its own best input. **And the leakage constraint inside it is the sharp edge** — ABU is 13 scenes,
+so a grid search over all 13 followed by a reported AUC over the same 13 is straightforward
+train-on-test, and it would produce a fusion result that beats every baseline for entirely
+illegitimate reasons. The tuning split must be carved out and named in
+`experiments/rx_vs_ae/fusion_weights.json` before any fused number is reported.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
