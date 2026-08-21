@@ -1142,6 +1142,46 @@ reason §3E.2 gives about feature bases. Standardizing is not automatically the 
 either — RX on standardized data is a different estimator from RX on radiance, and the literature
 AUCs this project will be compared against are mostly the latter.
 
+**APPLIED 2026-08-22.** `global_rx` and `streaming_rx` now both use `reg * (trace(sigma)/b) * I`.
+They had to change together: `streaming_rx` replicated the absolute ridge verbatim, and the
+`rtol=1e-5` equivalence that justifies that module's existence would otherwise have been comparing
+two different estimators. **`global_rx` now runs on 13/13 ABU scenes, previously 10/13.**
+
+---
+
+### D22.2 — the SAME `reg=1e-6` is also wrong in `kernel_rx`, for a different reason, and there it fails **silently** instead of crashing.
+
+`reg=1e-6` was carried into §3A.3's signature from §2.3's linear RX. But the regularized operator
+in kernel RX is a different object: the centered RBF Gram has **unit-scale** entries (`k(x,x)==1`),
+so this is not D22's scale-blindness — RBF is scale-free. It is that `N*reg` is simply far too
+small, leaving the N×N system effectively unregularized, so it **interpolates** the background
+subsample exactly.
+
+The consequence is worth stating precisely, because it is the most dangerous failure mode found so
+far. The score stops measuring anomaly and starts measuring *"were you in the random background
+subsample?"* — and it does so **without any error**:
+
+| implanted spike | 1σ | 2σ | 3σ | 5σ | 8σ | 15σ | **50σ** |
+|---|---|---|---|---|---|---|---|
+| rank of the implanted pixel (of 900) | 513 | 481 | 481 | 481 | 481 | 481 | **481** |
+
+Rank is **pinned at 481 regardless of magnitude** — a 50σ outlier and a 2σ one are ranked
+identically, because rank had stopped depending on the data at all. On real data (`abu-beach-2`),
+`reg=1e-6` scores **AUC 0.845** against **0.921** for anything in `[1e-3, 1]` — a flat plateau, so
+`1e-2` is a mid-plateau default rather than a tuned one. Fixed; the §3A.3 unit test that caught it
+asserts the implanted target ranks in the top 1%.
+
+**The generalization, which is the point of recording all three of these.** D22, D22.1 and D22.2
+are one mistake in three costumes: **a regularization constant transplanted between operators
+whose scales have nothing to do with each other.** §2.3 → §3A.2 carried it onto radiance-scale
+covariances (inert, D22 aside); §2.3 → §3A.5 carried it into the streaming accumulator (same);
+§2.3 → §3A.3 carried it onto a unit-scale Gram (silent mis-ranking). **`crd`'s `lam=1e-2` is the
+next one to check** — it regularizes a per-annulus Gram whose scale is again different, and the
+§3A.4 accept criterion (`lam → ∞` collapses the score to `‖y‖₂`) tests the regularizer's *direction*
+but says nothing about whether its default *magnitude* is in the useful range. Any future detector
+that takes a `reg`/`lam` should state what the regularized operator's scale is and why the default
+sits inside it.
+
 ---
 
 ### D22.1 — §3A.9's default fusion weights lose to the best single component on 3 of the first 4 ABU scenes. The grid search is load-bearing, not decorative.

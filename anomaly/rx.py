@@ -20,7 +20,15 @@ def global_rx(cube: np.ndarray, *, reg: float = 1e-6) -> np.ndarray:
     mu = flat[valid].mean(axis=0)
     centered = flat[valid] - mu
     sigma = (centered.T @ centered) / valid.sum()
-    sigma = sigma + reg * np.eye(b, dtype=sigma.dtype)
+    # SCALE-RELATIVE ridge (D22). `reg` is a FRACTION of mean band variance,
+    # not an absolute number of units. An absolute `reg * I` is meaningless
+    # against data whose scale we do not control: ABU ships native radiance
+    # with covariance diagonals of 1e4-1e6, where reg=1e-6 sits ten to twelve
+    # orders of magnitude below the quantity it is supposed to condition, and
+    # cho_factor raised LinAlgError on 3 of 13 ABU scenes. Scaling by
+    # trace(sigma)/b makes `reg` mean the same thing on radiance, reflectance
+    # and standardized input alike.
+    sigma = sigma + reg * (np.trace(sigma) / b) * np.eye(b, dtype=sigma.dtype)
 
     c, lower = cho_factor(sigma)
 
