@@ -31,7 +31,12 @@ from sklearn.decomposition import PCA
 from core.contracts import ROIRecord, SceneMeta, validate_roi
 from preprocessing.harmonize import reduce_bands
 from preprocessing.normalize import standardize
-from segmentation.infer import DEFAULT_TRANSFORMER_PATH, N_COMPONENTS, segment_rois
+from segmentation.infer import (
+    DEFAULT_TRANSFORMER_PATH,
+    N_COMPONENTS,
+    _windows_for_bbox,
+    segment_rois,
+)
 from segmentation.train_unet import LightUNet
 
 
@@ -279,6 +284,83 @@ def test_standardization_applied_before_model_D19():
     per_channel_std = seen.reshape(n_components, -1).std(axis=1)
     np.testing.assert_allclose(per_channel_mean, 0.0, atol=1e-3)
     np.testing.assert_allclose(per_channel_std, 1.0, atol=1e-3)
+
+
+def test_standardization_ordering_with_nan_padding_D19():
+    """§3B.6's `_prepare_model_input` docstring claims nan_to_num runs LAST,
+    AFTER standardize's nanmean/nanstd -- so a NaN-padded region (scene
+    smaller than `patch`) can never poison the real pixels' per-band
+    statistics with fake zeros. The other D19 test above never exercises
+    padding at all (every scene there is >= patch on both axes), so it
+    cannot distinguish correct ordering from the bug this docstring warns
+    against (nan_to_num before standardize, which WOULD drag the real
+    region's mean/std off 0/1). This test forces the padding branch: a
+    40x40 scene against patch=64 pads 40:64 on both axes with NaN before
+    _extract_window hands the window to preprocessing.
+    """
+    n_bands, n_components = 12, 6
+    rng = np.random.default_rng(11)
+    scene = rng.normal(size=(40, 40, n_bands)).astype(np.float32)   # scene < patch=64
+    transformer = _fit_transformer(n_bands=n_bands, n_components=n_components, seed=11)
+
+    recorder = _RecordingModel()
+    roi = _roi(0, (0, 0, 40, 40))   # bbox == whole (real) scene, well inside patch
+    segment_rois(scene, _meta(), [roi], recorder, transformer=transformer,
+                 patch=64, n_components=n_components, device="cpu")
+
+    assert len(recorder.calls) == 1
+    seen = recorder.calls[0][0].numpy()   # [C, 64, 64]
+
+    assert not np.isnan(seen).any(), "NaN padding must not reach the model"
+    # Padding (originally NaN) is filled with 0.0 by nan_to_num -- if it were
+    # filled BEFORE standardize instead, it would count as real zero-valued
+    # data in the nanmean/nanstd, biasing the real region's statistics away
+    # from 0/1 below.
+    assert np.all(seen[:, 40:, :] == 0.0)
+    assert np.all(seen[:, :, 40:] == 0.0)
+
+    real = seen[:, :40, :40].reshape(n_components, -1)
+    per_channel_mean = real.mean(axis=1)
+    per_channel_std = real.std(axis=1)
+    np.testing.assert_allclose(per_channel_mean, 0.0, atol=1e-3)
+    np.testing.assert_allclose(per_channel_std, 1.0, atol=1e-3)
+
+
+def test_windows_for_bbox_tiling_covers_the_whole_bbox():
+    """Direct test of the expand-vs-tile window schedule (infer.py module
+    docstring): for a bbox larger than `patch`, the union of returned
+    patch-aligned windows must cover every pixel of the bbox, and origins
+    must be deduplicated after edge-clipping (no duplicate scheduled job)."""
+    patch = 64
+    bbox = (0, 0, 130, 100)   # larger than patch on both axes -> tile case
+    scene_shape = (150, 150)
+
+    windows = _windows_for_bbox(bbox, patch, scene_shape)
+
+    assert len(windows) == len(set(windows)), "duplicate window origins after edge-clipping"
+
+    covered = np.zeros((150, 150), dtype=bool)
+    for (r0, c0) in windows:
+        covered[r0:r0 + patch, c0:c0 + patch] = True
+
+    r0, c0, r1, c1 = bbox
+    assert covered[r0:r1, c0:c1].all(), "tiled windows do not cover the full bbox"
+
+
+def test_windows_for_bbox_expand_case_single_window_inside_scene():
+    """bbox smaller than patch -> exactly one centered, in-bounds window."""
+    patch = 64
+    bbox = (70, 70, 78, 78)   # 8x8, well inside a large scene
+    scene_shape = (150, 150)
+
+    windows = _windows_for_bbox(bbox, patch, scene_shape)
+
+    assert len(windows) == 1
+    r0, c0 = windows[0]
+    assert 0 <= r0 <= 150 - patch and 0 <= c0 <= 150 - patch
+    r0b, c0b, r1b, c1b = bbox
+    assert r0 <= r0b and r0 + patch >= r1b
+    assert c0 <= c0b and c0 + patch >= c1b
 
 
 # --- every returned ROI still passes validate_roi -----------------------------

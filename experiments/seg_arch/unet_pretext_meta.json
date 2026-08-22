@@ -1,0 +1,20 @@
+{
+  "arm": "unet_pretext",
+  "spectra_provenance": "none",
+  "scored_on": "had100/test only",
+  "epochs_run": 40,
+  "epochs_requested": 60,
+  "patience": 12,
+  "n_components": 30,
+  "train_scenes": 417,
+  "val_scenes": 105,
+  "train_patches": 1668,
+  "val_patches": 420,
+  "reduce_bands_fit_pixels": 198492,
+  "best_epoch": 27,
+  "best_val_loss": 0.12428602327903111,
+  "train_seconds": 18386.226891756058,
+  "train_host": "local",
+  "device": "cuda",
+  "amp": false
+}

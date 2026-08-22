@@ -1248,6 +1248,50 @@ detector against every scene, and on this evidence it will find more.
 
 ---
 
+### D24 — `global_rx` accumulated its covariance in **float32**. §3A.5 wrote the warning about exactly this hazard into the *streaming* spec and never applied it to the reference implementation the streaming module is validated against.
+
+§3A.5 requires `streaming_rx` to match `global_rx` to `rtol=1e-5`, and says why the accumulator
+must be float64: *"float32 co-moment accumulation loses precision over 20 000+ pixels and quietly
+biases the covariance."* The agent building `tests/test_streaming_rx.py` measured the actual gap
+and found it nowhere near the spec:
+
+| scene | measured max relative difference | vs spec `1e-5` |
+|---|---|---|
+| Indian Pines | 8.5e-4 | 85× looser |
+| `abu-urban-3` | **4.3e-2** | **~4 300× looser** |
+
+**The reference was the imprecise one.** `global_rx` did `flat = cube.reshape(-1, b)` on a float32
+cube, so `centered.T @ centered` was a **float32** matmul over 10 000+ pixels. Verified directly:
+max relative error **1.15e-4** against a float64 reference of `global_rx`'s own formula on
+`abu-urban-3`. `streaming_rx` was already float64 — as §3A.5 demanded — so the two disagreed
+precisely to the extent the reference was wrong, and the module being validated was the more
+accurate of the pair.
+
+**Fixed** by accumulating `global_rx` in float64. The equivalence then becomes essentially exact:
+
+| scene | after |
+|---|---|
+| Indian Pines | **0.0** (bit-identical) |
+| `abu-urban-3` | **0.0** |
+| `abu-beach-1` | 1.2e-7 |
+
+AUC impact on the 13 ABU scenes is ≤ 0.0007 — this corrects a bias, it does not manufacture
+results.
+
+**Why this one is worth recording even though the fix is one line.** The natural response to a
+failing `rtol=1e-5` assertion is to loosen the tolerance until the test passes; the agent's first
+instinct was to use `rtol=0.1` for ABU, which would have been green, defensible-looking, and
+wrong. What made the difference was measuring *which side* was inaccurate before adjusting
+anything. **A tolerance is a claim about two implementations, and when it fails the reference is a
+suspect too** — here it was the culprit. The same reasoning applies to every remaining
+cross-implementation check in this project, and there are several coming in Phase 5.
+
+**Fifth consecutive finding from integration rather than unit tests** (D22, D22.1, D22.2, D23,
+D24). `test_rx.py` passed throughout: it never compared `global_rx` against a higher-precision
+reference, only against itself and synthetic fixtures.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
@@ -2106,7 +2150,9 @@ def filter_rois(rois, profile) -> tuple[list[ROIRecord], list[ROIRecord]]:
        written to experiments/cascade_recall_audit/ so a stage-2 false negative
        caused by the post-filter is traceable rather than invisible."""
 ```
-Profile thresholds per D6. **Sanity constraint:** the `object` profile's `max_area_px = 2000` sits against 64×64 HAD100 patches (4 096 px total) — a target may legitimately occupy half a patch, so `max_area_px` is expressed as `min(2000, 0.5 * scene_px)` and computed per scene, not as a constant. Because it is per-scene it also survives D11.2's raw-scene shapes without edits: 4 096 px at 64×64, 14 400 px at 120×120. It is the only one of the three `patch=64`-adjacent sites that needed no revision.
+Profile thresholds per D6. **Sanity constraint:** the `object` profile's `max_area_px = 2000` sits against 64×64 HAD100 patches (4 096 px total) — a target may legitimately occupy half a patch, so `max_area_px` is expressed as `min(2000, 0.5 * scene_px)` and computed per scene, not as a constant.
+
+> **Correction (2026-08-22, found by execution).** The rule is right; **this paragraph's worked example was wrong.** It claimed the per-scene term makes 64×64 and 120×120 behave differently, but `0.5 * scene_px` is **2 048** at 64×64 and **7 200** at 120×120, and both exceed the base `max_area_px = 2000` — so the resolved ceiling is **2000 at both sizes** and the scaling term is a no-op at exactly the two shapes named to demonstrate it. It binds only below ~4 000 scene px (roughly ≤ 63×63). `resolve_profile` implements the plain reading — a cap stopping one ROI from exceeding half the scene — and is correct; the claim that these two sizes yield opposite verdicts for the same ROI does not hold. Pinned in `tests/test_postfilter_profile.py` at both the genuinely-differing sizes (32×32 → ceiling 512 vs 120×120 → ceiling 2000) **and** at the plan's own named sizes, so the no-op stays recorded in the suite rather than only here. Same class as D20's arithmetic slip: the normative prose was right and the illustration was not.
 
 #### 3B.8 Deliverable — `experiments/seg_arch/`
 **O8 is decided: option 2 of D13.4 is adopted.** Learned models are scored on **HAD100 only** —

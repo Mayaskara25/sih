@@ -48,6 +48,11 @@ def test_shape_and_dtype_contract():
 # --- residual is strictly non-negative --------------------------------------
 
 def test_residual_nonnegative_everywhere_except_nan():
+    """np.linalg.norm can't return a negative number, so this alone can't
+    fail from an arithmetic mistake -- kept as a cheap contract guard, not
+    load-bearing by itself. The load-bearing companion is the interpolation
+    check below: a residual that is non-negative but numerically collapsed
+    to ~0 everywhere would still pass this and still be broken."""
     rng = np.random.default_rng(1)
     cube = rng.normal(size=(14, 14, 5)).astype(np.float32)
     cube[3, 3, :] = np.nan   # also exercise the NaN path in the same call
@@ -55,6 +60,31 @@ def test_residual_nonnegative_everywhere_except_nan():
     finite = scores[~np.isnan(scores)]
     assert finite.size > 0
     assert np.all(finite >= 0.0)
+
+
+def test_default_lam_does_not_interpolate_at_native_radiance_scale():
+    """D22.2's silent-failure mode, reproduced synthetically: if `lam` is
+    negligible relative to the Gram's scale, X^T X alone (near-OLS) fits y
+    almost exactly for every pixel and the residual collapses uniformly
+    towards 0 regardless of whether the pixel is anomalous -- the score
+    stops discriminating anything. Scale the cube up to ABU's native
+    radiance order (D13.2: max ~1e4-2e4) rather than unit-scale, because
+    D22's own lesson is that unit-scale synthetic fixtures hide exactly
+    this bug. K = outer**2 - inner**2 = 16 here with a small 5x5 window and
+    B=6 bands (K > B, the more permissive-to-interpolate regime), so a
+    residual collapse would show up clearly if the default were unsafe at
+    this K/B ratio."""
+    rng = np.random.default_rng(9)
+    cube = (rng.normal(loc=5000.0, scale=2000.0, size=(16, 16, 6))
+            .astype(np.float32))
+    scores = crd(cube, outer=5, inner=3, lam=1e-2)
+    y_norms = np.linalg.norm(cube.reshape(-1, 6).astype(np.float64), axis=-1)
+    ratio = scores.ravel() / y_norms
+    # Real (non-collapsed) discrimination: residual should be a real
+    # fraction of ||y||, not uniformly pinned near machine-epsilon.
+    assert np.median(ratio) > 1e-3, (
+        f"median score/||y|| = {np.median(ratio):.2e} -- looks collapsed "
+        "(interpolating) at native scale, D22.2's failure mode")
 
 
 # --- lam -> inf collapses the score to ||y||_2 -------------------------------
@@ -151,24 +181,80 @@ def test_implanted_target_rank_responds_to_spike_magnitude():
         scores = crd(cube, **_FAST_KW).ravel()
         ranks.append(int((scores > scores[r * w + c]).sum()))
 
-    # Strictly non-increasing as magnitude grows, and NOT flat across the
-    # whole sweep (the pinned-rank failure mode).
-    assert ranks[0] >= ranks[1] >= ranks[2]
+    # Not a strict monotonic chain (seed-fragile with only 3 points on
+    # unit-normal data) -- the two properties that actually distinguish
+    # "working" from kernel_rx's D22.2 pinned-rank failure: the biggest
+    # spike must clearly outrank the smallest, and it must land near the
+    # very top rather than merely somewhere unremarkable.
+    assert ranks[2] < ranks[0], f"50-sigma spike did not outrank 1-sigma spike: {ranks}"
+    assert ranks[2] < 0.02 * (h * w), f"50-sigma spike not near top: rank {ranks[2]}"
     assert len(set(ranks)) > 1, f"rank pinned at every magnitude: {ranks}"
+
+
+@pytest.mark.skipif(not _have_abu, reason="ABU benchmark not fetched")
+def test_implanted_target_rank_responds_to_magnitude_on_real_abu_crop():
+    """The synthetic version above uses unit-scale data, which is exactly
+    the regime D22 warns hides scale-blindness bugs ("the fixture's scale
+    hid the bug the fixture existed to find"). Repeat the same rank-vs-
+    magnitude check on a small crop of real, native-radiance ABU data
+    (abu-beach-4, B=102, the most K>B/over-complete scene in the set --
+    see this branch's report) at the shipped default lam=1e-2, so this
+    suite can actually catch a D22.2-style silent failure rather than only
+    a synthetic stand-in for one."""
+    path = ABU_DIR / "abu-beach-4.mat"
+    if not path.exists():
+        pytest.skip("abu-beach-4 not fetched")
+    cube, _meta = load_scene(path, source="abu")
+    # small crop, away from the labelled anomaly region (rows 13-98,
+    # cols 0-30, per this branch's investigation) so the implant is
+    # planted on genuine background.
+    crop = cube[100:120, 100:120, :]
+    h, w, b = crop.shape
+    flat = crop.reshape(-1, b).astype(np.float64)
+    std = flat.std(axis=0)
+    r, c = h // 2, w // 2
+
+    ranks = []
+    for mag in (1.0, 8.0, 50.0):
+        test_cube = crop.copy().astype(np.float64)
+        test_cube[r, c] = crop[r, c].astype(np.float64) + mag * std
+        scores = crd(test_cube.astype(np.float32), lam=1e-2).ravel()
+        ranks.append(int((scores > scores[r * w + c]).sum()))
+
+    assert ranks[2] < ranks[0], (
+        f"on real ABU data, a 50-sigma implant did not outrank a 1-sigma "
+        f"one: ranks={ranks} -- this is the exact D22.2 pinned-rank "
+        f"signature (kernel_rx's rank stuck at 481 of 900 for every "
+        f"magnitude from 1sigma to 50sigma)")
 
 
 # --- AUC on a subsample of ABU scenes, macro + micro (labelled) -------------
 
-_SUBSAMPLE_SCENES = ["abu-airport-1", "abu-beach-2", "abu-urban-4"]
+# CRD at the default window (outer=15/inner=5, K=200) costs ~30ms/pixel even
+# on an otherwise-idle machine -- a full 100x100 scene is ~5 minutes, and
+# the full 13-scene table (2 of which are 150x150) is well over an hour.
+# These crops are chosen (see this branch's report for the row/col ranges
+# pulled from each scene's `map`) to retain EVERY positive pixel while
+# cutting the pixel count ~3-6x, so the AUC number below is a faithful
+# (if partial-coverage) measurement on real data rather than a synthetic
+# stand-in -- not the full-frame number that belongs in a proper
+# experiments/rx_vs_ae/ deliverable table. The full 13-scene, full-frame
+# table (produced out-of-repo, not part of this fast suite) is in this
+# branch's report.
+_SUBSAMPLE_CROPS = {
+    "abu-airport-1": (slice(0, 60), slice(0, 100)),    # 144/144 positives
+    "abu-beach-2":   (slice(0, 70), slice(15, 65)),    # 202/202 positives
+    "abu-beach-4":   (slice(0, 100), slice(0, 35)),    #  68/68 positives
+}
 
 
 @pytest.mark.skipif(not _have_abu, reason="ABU benchmark not fetched")
 def test_auc_on_abu_subsample_macro_and_micro():
     """CRD (default outer=15/inner=5) is slow -- O(H*W) systems of size
-    K=200 each -- so this test subsamples 3 of the 13 ABU scenes rather
-    than all 13 (the full 13-scene table, required by the §3A.4 accept
-    criterion as a reported deliverable rather than a fast unit test, was
-    produced out-of-repo; see this branch's report).
+    K=200 each -- so this test uses positive-retaining crops of 3 of the
+    13 ABU scenes rather than all 13 full frames (see module-level comment
+    above and this branch's report for the full 13-scene table, produced
+    out-of-repo).
 
     §3A.10 mandates scene-macro-average as PRIMARY (each scene weighted
     equally) with pixel-micro-average only as a labelled secondary -- an
@@ -176,25 +262,28 @@ def test_auc_on_abu_subsample_macro_and_micro():
     """
     aucs = []
     all_scores, all_labels = [], []
-    for scene in _SUBSAMPLE_SCENES:
+    for scene, (rsl, csl) in _SUBSAMPLE_CROPS.items():
         path = ABU_DIR / f"{scene}.mat"
         if not path.exists():
             pytest.skip(f"{scene} not fetched")
         cube, _meta = load_scene(path, source="abu")
         raw = loadmat(path)
-        labels = (raw["map"] > 0).astype(int).ravel()
+        labels_full = (raw["map"] > 0).astype(int)
 
-        scores = crd(cube).ravel()
+        cube_c = cube[rsl, csl, :]
+        labels = labels_full[rsl, csl].ravel()
+
+        scores = crd(cube_c).ravel()
         auc = roc_auc_score(labels, scores)
         aucs.append(auc)
         all_scores.append(scores)
         all_labels.append(labels)
-        print(f"\nCRD {scene}: AUC={auc:.4f}")
+        print(f"\nCRD {scene} (crop, n_pos={int(labels.sum())}): AUC={auc:.4f}")
 
     macro = float(np.mean(aucs))
     micro = roc_auc_score(np.concatenate(all_labels), np.concatenate(all_scores))
-    print(f"CRD macro-AUC (primary, n={len(aucs)} scenes)  = {macro:.4f}")
-    print(f"CRD micro-AUC (secondary, pooled pixels)       = {micro:.4f}")
+    print(f"CRD macro-AUC (primary, n={len(aucs)} scenes, crops) = {macro:.4f}")
+    print(f"CRD micro-AUC (secondary, pooled pixels, crops)      = {micro:.4f}")
 
     assert 0.0 <= macro <= 1.0
     assert 0.0 <= micro <= 1.0

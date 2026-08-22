@@ -14,7 +14,15 @@ def global_rx(cube: np.ndarray, *, reg: float = 1e-6) -> np.ndarray:
     Uses scipy.linalg.cho_factor / cho_solve -- never an explicit inverse.
     """
     h, w, b = cube.shape
-    flat = cube.reshape(-1, b)
+    # float64 accumulation (D24). The cube is float32, and a float32
+    # `centered.T @ centered` over 10 000+ pixels loses precision and quietly
+    # biases the covariance -- measured max relative error 1.15e-4 against a
+    # float64 reference on abu-urban-3. This is the exact hazard PLAN.md
+    # §3A.5 writes into the STREAMING spec ("float32 co-moment accumulation
+    # loses precision over 20 000+ pixels and quietly biases the
+    # covariance"); the warning was simply never applied to the reference
+    # implementation it was meant to protect.
+    flat = cube.reshape(-1, b).astype(np.float64, copy=False)
     valid = ~np.any(np.isnan(flat), axis=-1)
 
     mu = flat[valid].mean(axis=0)
