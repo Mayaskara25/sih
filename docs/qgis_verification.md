@@ -1,93 +1,113 @@
-# QGIS verification — how to close O4
+# QGIS verification — result, and how to re-run it
 
-O4 is the last thing gating the Phase 2 exit criterion. It needs a human with
-a GUI; there is no QGIS in the dev environment (`which qgis` finds nothing).
+**O4 is CLOSED (D26, 2026-08-22, QGIS 4.2.1 "Belém do Pará"). Phase 2 exit is
+signed off.** This document records what was verified, what was deliberately
+*not* verified, and how to reproduce either check after a pipeline rerun.
 
-**There are two different checks here and they answer different questions.**
-Conflating them is the main way this goes wrong, so do them in this order.
+Two checks. They answer **different questions**, and conflating them is the
+main way this goes wrong — so they live in separate project files with
+deliberately different setups.
+
+| | Check A | Check B |
+|---|---|---|
+| project | `qgis/projects/phase2_verify.qgz` | `qgis/projects/demo_verify.qgz` |
+| data | Indian Pines | HAD100 `ang20170821t183707_100` |
+| CRS | EPSG:32616 (**synthetic**, D2) | EPSG:32611 (**real**, D11.5) |
+| basemap | **none, on purpose** | OpenStreetMap |
+| question | do polygons land on the right *pixels*? | do they land on the right *place on Earth*? |
+| status | **PASS** | **PASS** |
 
 ---
 
-## Check A — affine plumbing (§2.10, the one O4 names)
+## Running them
+
+```bash
+qgis qgis/projects/phase2_verify.qgz
+qgis qgis/projects/demo_verify.qgz
+```
+
+Both open fully styled — magma 0–1 raster, red ROI outlines, `roi_id` labels
+with halos, correct project CRS and a saved view extent. No Symbology work.
+
+Three harmless startup messages, all safe to dismiss:
+
+- **"Wayland session detected: user experience will be degraded"** — cosmetic.
+  Use `QT_QPA_PLATFORM=xcb qgis …` if dialogs misbehave.
+- **Master password / wallet** — QGIS's credential store for database
+  connections. This project uses none. *Settings → Options → Authentication*
+  to silence permanently.
+- **DB Manager deprecation** — unrelated plugin notice.
+
+---
+
+## Check A — affine plumbing (§2.10)
 
 **Question:** do the polygons land on the pixels the detector actually fired
-on? This is about the raster→world→GeoJSON transform chain being wired
-correctly. It is **not** about real-world accuracy.
+on? This tests the raster→world→GeoJSON transform chain. It says **nothing**
+about real-world accuracy.
 
-**Files** (already on disk, `experiments/phase2/`):
+**Result: PASS.** The magma raster renders with visible structure and the 3
+ROIs sit on high-score pixels. No offset, mirror, rotation or scale error.
 
-| layer | file |
-|---|---|
-| score raster | `Indian_pines_corrected_anom_norm.tif` |
-| ROI polygons | `Indian_pines_corrected_rois.geojson` |
-| binary mask | `Indian_pines_corrected_mask.tif` |
+**If you re-run it and it fails,** the symptom names the cause:
 
-**Steps**
-
-1. Install QGIS (`sudo pacman -S qgis` on Arch; or flatpak `org.qgis.qgis`).
-2. `Layer → Add Layer → Add Raster Layer…` → `Indian_pines_corrected_anom_norm.tif`
-3. Style it: double-click the layer → **Symbology** → Render type **Singleband
-   pseudocolor** → colour ramp **Magma** → Min 0, Max 1.
-4. `Layer → Add Layer → Add Vector Layer…` → `Indian_pines_corrected_rois.geojson`
-5. Style it: **Symbology** → Simple fill → Fill style **No Brush**, stroke
-   **red**, width 0.5. Then **Labels** → Single labels → Value `roi_id`.
-6. Right-click the vector layer → **Zoom to Layer**.
-
-**What passing looks like:** every red outline sits on top of a bright
-(high-score) blob in the magma raster. No systematic offset, no flip, no
-90° rotation, no polygons off the raster edge.
-
-**What failing looks like, and what each means:**
-
-| symptom | likely cause |
+| symptom | cause |
 |---|---|
 | polygons offset by a constant | affine translation term wrong |
 | polygons mirrored vertically | row origin flipped (north-up vs south-up) |
-| polygons rotated 90° | row/col swapped somewhere in `mask_to_rois` |
+| polygons rotated 90° | row/col swapped in `mask_to_rois` |
 | polygons at a wildly different scale | pixel-size term wrong |
 
-> **Do NOT add a basemap for this check and do not conclude anything about
-> real-world position from it.** Indian Pines ships **no CRS and no affine**
-> (D13.1), so the pipeline assigns a synthetic one (D2). The polygons will
-> land at some arbitrary spot on Earth. **That is expected and is not a bug.**
-> Any Indian Pines result carries `georef: "synthetic"` and §13 rule 7 forbids
-> drawing a geospatial accuracy metric from it.
+> **There is no basemap in this project, deliberately.** Indian Pines ships
+> **no CRS and no affine** (D13.1), so the pipeline assigns a synthetic one
+> (D2). The scene will land at an arbitrary spot on Earth. **That is expected
+> and is not a bug.** Every Indian Pines result carries `georef: "synthetic"`,
+> and §13 rule 7 forbids drawing any geospatial accuracy metric from it.
+
+**Finding the ROIs.** They are **20, 11 and 5 pixels** in a 145×145 raster, so
+at full-scene zoom they are small even at the deliberately-thick 1.4 outline
+width. Right-click the ROI layer in the **Layers panel** (bottom-left, *not*
+the map canvas) → **Zoom to Layer**. To make them unmistakable, open the
+attribute table and `Ctrl+A` — selected features highlight yellow.
 
 ---
 
-## Check B — real georeferencing (stronger, and now possible)
+## Check B — real georeferencing
 
 **Question:** do the polygons land in the right place *on Earth*?
 
-This one is real, because the demo now runs on HAD100/AVIRIS, which ships
-genuine UTM headers on all 616 scenes (D11.5) parsed via GDAL (D14.2).
+Real, because HAD100 ships genuine UTM headers on all 616 scenes (D11.5),
+parsed via GDAL (D14.2) rather than a hand-rolled `map info` reader.
 
-```bash
-.venv/bin/python pipeline/demo.py --assert-offline --out experiments/demo
-```
+**Result: PASS.** The scene lands on **Dogpound Creek, Alberta, Canada**,
+matching the transform of the GeoTIFF's own bounds (−114.501…−114.499,
+51.440…51.442) computed independently of QGIS. At 1:301 and 1:64 the outlines
+trace the bright pixels **including the cross-shaped notches of the mask
+boundary** — so the polygons follow the actual connected component, not its
+bounding box.
 
-**Files** (`experiments/demo/`):
+**Three independent lines of evidence agree on the same affine:**
 
-| layer | file |
-|---|---|
-| score raster | `ang20170821t183707_100_anom_norm.tif` |
-| ROI polygons | `ang20170821t183707_100_demo.geojson` |
+1. the ENVI header's own UTM `map info`, via GDAL;
+2. OpenStreetMap placing the scene on a *named* real-world feature;
+3. **a derived GSD** — a 3-pixel ROI reports 26.5 m², implying ~3 m ground
+   sample distance, which matches AVIRIS-NG.
 
-Same styling steps as Check A, then **add a basemap**:
-`Browser panel → XYZ Tiles → OpenStreetMap` (drag to the bottom of the layer
-stack). If XYZ Tiles is empty, right-click it → New Connection, name
-`OpenStreetMap`, URL `https://tile.openstreetmap.org/{z}/{x}/{y}.png`.
+The third is the most useful, because it is **independent of the basemap**: a
+transform wrong by a scale factor would have to be wrong by a *plausible*
+factor to survive it. Check it yourself in the attribute table.
 
-**What to expect:** the scene reports **EPSG:32611** (UTM zone 11N) and the
-ROIs land near **-114.50, 51.44** — southern Alberta, Canada. The raster
-should sit on real terrain, not in the ocean and not at 0°N 0°E.
+### What Check B does NOT establish
 
-**A cross-check worth doing, because it is independent of the basemap:** open
-the GeoJSON attribute table and look at `area`. A 3-pixel ROI reports about
-**26.5 m²**, which implies roughly **3 m** ground sample distance — AVIRIS-NG's
-actual GSD. A transform that is wrong by a scale factor would have to be wrong
-by a *plausible* factor to survive that test, which is a much stronger
-statement than "the polygons look like they are in Canada."
+Phase 5 Level 2's accept criterion is *"polygon centroids for a **manually
+identified feature** land within 2 pixels (~2 GSD) of its true position."*
+That needs a target whose true position is independently known. These ROIs are
+**unlabelled anomalies over scrubland** with no ground truth to compare
+against.
+
+So: **scene-level placement is verified; feature-level accuracy is not.**
+Level 2 stays open on that criterion, and **no location-accuracy number may be
+quoted from this check.**
 
 ---
 
@@ -98,50 +118,48 @@ python3 scripts/build_qgis_project.py        # system python3, NOT .venv/bin/pyt
 ```
 
 Rebuilds both `.qgz` files from the pipeline's current outputs, fully styled.
-Run it after any rerun of `run_pipeline.py` or `demo.py`.
+Run it after any rerun of `run_pipeline.py` or `demo.py`. The `.qgz` files are
+committed, so the styling is reproducible rather than living in one person's
+session.
 
-**Use system `python3` deliberately.** PyQGIS cannot be installed into the
-venv: it is not on PyPI, and `qgis/_core.so` is compiled against Python 3.14
-while D1 pins the venv to 3.12.13 for `fiona`. Forcing it via `PYTHONPATH`
-fails on `PyQt6.sip`. Nothing else in the repo imports `qgis`, so the split
-costs nothing.
-
-**A trap in this specific repo:** §2.10 requires output under `qgis/projects/`,
-so a directory named `qgis/` sits at the repo root — and Python imports it as
-a PEP 420 namespace package, shadowing the real PyQGIS. `import qgis`
-**succeeds**; only `qgis.__file__ is None` gives it away. The script strips the
-repo root from `sys.path` before importing for exactly this reason.
-
-## Saving the project
-
-§2.10 asks for `qgis/projects/phase2_verify.qgz`:
-
-```bash
-mkdir -p qgis/projects
-```
-Then `Project → Save As…` → `qgis/projects/phase2_verify.qgz`.
-
-Save Check B as `qgis/projects/demo_verify.qgz` alongside it.
-
-`.qgz` files are small and belong in git — check `.gitignore` does not exclude
-them before committing.
+**Use system `python3` deliberately.** PyQGIS **cannot** be installed into the
+venv, and this is structural, not a missing step: it is not on PyPI (it ships
+with the `qgis` system package), and `qgis/_core.so` is compiled against
+**Python 3.14** while D1 pins the venv to **3.12.13** for `fiona`. Forcing it
+via `PYTHONPATH` fails on `PyQt6.sip` (verified). The only alternative would be
+rebuilding QGIS against 3.12 — trading a real constraint for a cosmetic one.
+Nothing else in the repo imports `qgis`, so the split costs nothing.
 
 ---
 
-## Reporting the result
+## Three traps this exercise found
 
-If Check A passes, **O4 is closed and Phase 2 exit is signed off**. Say so in
-`plan.md` §14 with the date, the QGIS version, and which of the 3 Indian Pines
-ROIs you inspected.
+All three produced **convincing false signals** — the reason they are written
+down rather than just fixed.
 
-If Check B passes, that is **stronger evidence than Phase 2 was ever going to
-give** — real georeferencing verified against an independent basemap. It does
-not formally close O4 (which names the Phase 2 artefact), but it is the check
-that actually matters for the Phase 5 Level 2 claim, and it is worth recording
-as a D-entry either way.
+**1. `import qgis` succeeds against an empty directory.** §2.10 requires output
+under `qgis/projects/`, so a directory named `qgis/` sits at the repo root, and
+Python imports it as a PEP 420 **namespace package**, shadowing the real
+PyQGIS. `import qgis` returns cleanly; only `qgis.__file__ is None` reveals it.
+That exact check was run, passed, and PyQGIS was reported "available in the
+venv" — where it is not installed at all. `build_qgis_project.py` now strips
+the repo root from `sys.path` before importing.
 
-A programmatic affine check already passed on all 3 Indian Pines ROIs (D14) —
-polygon bounds against `meta.transform`-derived pixel bounds. That is
-**partial, not sufficient** evidence: it verifies the transform is applied
-consistently, not that it is the right transform. The eyeball is what
-distinguishes those two.
+**2. An empty project CRS puts the basemap in the wrong country.** Every layer
+was individually correct — raster EPSG:32611, ROIs EPSG:4326, OSM EPSG:3857 —
+and `QgsProject.crs()` was empty, so on-the-fly reprojection misplaced the
+tiles. The raster rendered, the polygons rendered, and OSM painted a detailed,
+plausible **French town** underneath, which reads as *"the georeferencing is
+broken"* rather than *"the project has no CRS."* The arithmetic that settles
+it: read the scene's UTM easting/northing (673818, 5701837) as **Web Mercator**
+metres and you get lon 6.05, lat 45.5 — Montmélian, France, exactly where the
+tiles drew. The data was right the whole time.
+
+**3. A `Null` default view extent gives a blank white canvas.** QGIS opens at
+scale 1:1 near the origin while the data sits at easting ~500 000. Both layers
+load and style correctly in the panel and the map is empty — indistinguishable
+from a styling failure. The projects now save a 20 %-padded extent. If you ever
+see this with any layer: right-click → **Zoom to Layer**.
+
+The common thread, shared with D22/D24/D25 from the same day: **a check that
+passes for the wrong reason is worse than one that fails.**
