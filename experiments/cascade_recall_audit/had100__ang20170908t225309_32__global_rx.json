@@ -1,0 +1,26 @@
+{
+  "scene": "ang20170908t225309_32",
+  "dataset": "had100",
+  "detector": "global_rx",
+  "target_recall": 0.98,
+  "threshold": 549.6419067382812,
+  "induced_fp_rate": 0.059911540008041816,
+  "n_components_total": 30,
+  "n_components_missed": 1,
+  "missed": [
+    {
+      "component": 24,
+      "n_px": 1,
+      "extent": [
+        82,
+        48,
+        83,
+        49
+      ],
+      "mean_score": 517.1561889648438,
+      "max_score": 517.1561889648438,
+      "threshold": 549.6419067382812,
+      "margin": 32.4857177734375
+    }
+  ]
+}

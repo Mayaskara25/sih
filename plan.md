@@ -1375,11 +1375,34 @@ operational benefit, since the oracle column is unavailable at inference — and
 bootstrapped does not earn its place. Reporting fusion as the headline detector on this evidence
 would be exactly the kind of claim §13 exists to prevent.
 
-**Not yet checked, and it should be:** all of this is on ABU, where the `index` component cannot
-run at all (D20 — no wavelengths). **HAD100 ships real wavelengths**, so it is the only place the
-4-component fusion the plan actually specifies can be evaluated. It is possible fusion earns its
-keep there and not on ABU. Until that is measured, "fusion underperforms" is a statement about
-the 3-component variant on ABU only, and must be labelled as such.
+**RESOLVED 2026-08-22 — the 4-component fusion was measured on HAD100 and it does not rescue the
+result.** D25 originally caveated that everything above was the 3-component variant on ABU, where
+`index` cannot run at all (D20), and that HAD100 — the one benchmark shipping real wavelengths —
+was the only place the fusion the plan actually specifies could be evaluated. That run is done:
+**94 HAD100 scenes, all 94 emitting `ace+index+rx+spatial`**, verified in `results.csv` rather
+than assumed.
+
+| HAD100 (94 scenes) | scene-macro ROC-AUC | PR-AUC macro |
+|---|---|---|
+| `kernel_rx` | **0.9713** | 0.6529 |
+| `global_rx` | 0.9599 | 0.6119 |
+| `crd` | 0.9583 | 0.5437 |
+| **`fused` (4-component)** | **0.9359** | 0.4144 |
+| `local_rx` | 0.9004 | 0.4499 |
+
+Fusion ranks **4th of 5** with the full component set, on the dataset chosen specifically to give
+it its best chance. The `index` component does not earn its weight. **The caveat is discharged
+against fusion, not in its favour**, and the "do not claim fusion beats its components" rule in
+this entry now applies without qualification rather than only to ABU.
+
+Worth noting how close this came to being reported the other way. The harness had only ever built
+`rx+ace+spatial`, so every fusion number in this project — including this entry's original
+verdict — was the 3-component variant, and the 4-component detector the plan specifies had
+**never once run**. The fix was written, asserted out on a stale anchor before writing, and the
+run that followed produced entirely plausible HAD100 numbers from the unchanged code. It was
+caught only by checking whether the edit had landed instead of trusting the output. **A plausible
+number from code you believe you changed is the most dangerous artefact in this project** — it
+looks exactly like a result.
 
 ---
 
