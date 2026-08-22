@@ -1624,6 +1624,85 @@ have failed a test. That is now the branch's own restatement of the lesson D22/D
 
 ---
 
+### D28 — the fidelity quantum kernel **exponentially concentrates**, and on held-out flightlines it scores *below chance*. Same failure mode as D22.2, different cause, and this one no regularizer fixes. Measured 2026-08-22 on the real split.
+
+Found by integration, not by any unit test — `tests/test_quantum_kernel.py`'s 11 tests all pass,
+including a sign-orientation test that requires AUC > 0.5 **on the training split**, where the
+arm scores 0.98.
+
+**The measurement.** `QuantumKernelArm` (ZZ feature map, `reps=2`, linear entanglement,
+`OneClassSVM(kernel="precomputed")`) fitted on the 300 background rows of the train split:
+
+| ν | train AUC | val AUC | **test AUC** |
+|---|---|---|---|
+| 0.01 | 0.9838 | 0.6872 | **0.3775** |
+| 0.05 | 0.9839 | 0.6871 | **0.3780** |
+| 0.10 | 0.9847 | 0.6872 | **0.3780** |
+| 0.30 | 0.9823 | 0.6831 | **0.3774** |
+| 0.50 | 0.9628 | 0.6754 | **0.3817** |
+
+Flat in ν, so it is not a regularization-strength problem — D22.2's fix does not apply. And 0.38
+is not *failure*, it is **inversion**: a model with no signal scores 0.5. The arm ranks anomalies
+as more normal than background on the held-out flightlines, consistently.
+
+**The cause: kernel concentration.** Mean off-diagonal of the background Gram, against a diagonal
+pinned at 1.0:
+
+| feature map | mean off-diag | p99 | train | val | test |
+|---|---|---|---|---|---|
+| `zz`, reps=1 | 0.0484 | 0.944 | 0.9751 | 0.7880 | 0.5658 |
+| `zz`, reps=2 (**as specified**) | 0.0384 | 0.901 | 0.9847 | 0.6872 | **0.3780** |
+| `zz`, reps=3 | 0.0329 | 0.861 | — | — | — |
+| `z`, reps=2 | 0.1980 | 0.982 | 0.7409 | 0.6369 | 0.5583 |
+
+The Gram is **near-identity**: the kernel declares almost every pair of pixels nearly orthogonal.
+Concentration deepens monotonically with `reps`, exactly as the exponential-concentration results
+for fidelity kernels predict, and **train AUC rises while test AUC falls as it deepens**. A
+near-identity Gram lets the one-class SVM memorize the 300 training background points — which is
+what 0.98 train AUC actually measures. This is D22.2's lesson recurring: *the score stopped
+depending on the data and started reporting "were you in the training set?"* There the cure was
+sizing the ridge to the data; here the concentration is a property of the feature map itself, and
+no `ν` reaches it.
+
+(Aside: `pauli` with default Paulis reproduces `zz` to the digit — `pauli_feature_map`'s default
+`paulis=['Z','ZZ']` **is** the ZZ map. §3E.2 offers three `kind` values and two of them are the
+same circuit. Worth knowing before anyone reports them as independent configurations.)
+
+**Why the inversion, specifically.** D27.9 measured that 33.8 % of test rows sit clipped at the
+encoding boundary and that clipping hits **background** (39.3 %) harder than **anomalies**
+(28.3 %). So on the test flightlines it is the *background* that sits far from the training
+background distribution. A memorizing one-class model therefore calls background anomalous and
+anomalies normal. D27.9 identified the mechanism; this is its consequence, and the two were
+measured independently.
+
+**The classical baselines on the identical 8 features, identical split** — which is the entire
+point of building the comparison this way:
+
+| detector | train | val | test |
+|---|---|---|---|
+| Mahalanobis / RX | 0.8255 | 0.7396 | **0.6635** |
+| `OneClassSVM(rbf, gamma=1.0)` | 0.7573 | 0.5613 | 0.5797 |
+| `OneClassSVM(rbf, gamma="scale")` | 0.6053 | 0.4508 | 0.5568 |
+| quantum kernel, best config (`zz` reps=1) | 0.9751 | 0.7880 | 0.5658 |
+| quantum kernel, as specified (`zz` reps=2) | 0.9847 | 0.6872 | **0.3780** |
+
+**Plain RX on eight PCA components beats every quantum-kernel configuration on held-out
+flightlines**, and it is four lines of numpy. That is a legitimate result for §3E.6's table and
+it is the opposite of an advantage claim, which is what §13 rule 4 exists to protect.
+
+**What gets reported.** Both: `reps=2` because §3E.5 specifies it, and `reps=1` / `z` because the
+sweep is what identifies the cause. Selecting the best configuration silently and reporting one
+number would hide the finding, and the finding is more valuable than the number. Note also that
+the sweep above reads **val**, never test, for any selection — test appears in this note as a
+measurement, and no configuration was chosen by it.
+
+**Third time this pattern has produced a defect in this project** (D22, D22.2, now D28): a
+detector whose training-set behaviour is excellent and whose held-out behaviour is inverted, with
+a green test suite throughout, because every test asserted against the data the model had already
+seen.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
