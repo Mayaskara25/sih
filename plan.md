@@ -1738,6 +1738,385 @@ seen.
 
 ---
 
+### D29 — Branch 3E ran to completion (2026-08-22). The full comparison is in, and it is a clean negative result: **every quantum arm loses to `rx_8feat` on identical features under the identical split.** Reported as such; no patching, no rescoping.
+
+`quantum/classical_vs_quantum.py` ran unmodified — zero failures across all 8 rows × 28 test
+scenes (224/224 scene rows `status=ok`) — writing
+`experiments/quantum_results/{results.csv,results_pooled.csv,run_manifest.json}` at
+`git_sha 4f47a40`. Total wall-clock 53 min against the ~2 h budgeted: VQC fit 1671 s (~28 min)
+and QAE 796 s (~13 min), both under their D27.0 estimates. Scene-macro pooled (primary,
+D27.7-weighted):
+
+| row_id | supervision | swept | roc_auc_MACRO | pr_auc_MACRO | fit_wall_clock_s |
+|---|---|---|---|---|---|
+| classical_svc | supervised | yes | **0.8130** | 0.4078 | 0.01 |
+| rx_8feat | unsupervised | yes | 0.7316 | **0.5132** | <0.01 |
+| classical_ocsvm | unsupervised | yes | 0.6293 | 0.1416 | 0.01 |
+| classical_ae | unsupervised | yes | 0.5819 | 0.2054 | 0.72 |
+| quantum_kernel_valscale | unsupervised | yes | 0.6815 | 0.1455 | 1.29 |
+| vqc | supervised | no | 0.4736 | 0.0723 | 1671.01 |
+| qae | unsupervised | no | 0.4186 | 0.0184 | 796.10 |
+| quantum_kernel_spec | unsupervised | no | 0.4017 | 0.0206 | 1.09 |
+
+Full table with n_qubits/transpiled depth: `docs/experiments.md` §4.
+
+**D28's findings reproduced inside the committed runner, not copied from the note.** Val again
+selected angle_scale 0.5 (val AUC 0.7044 vs 0.6872 at the spec's 1.0), so `quantum_kernel_spec`
+and `quantum_kernel_valscale` are genuinely different rows and both appear. The manifest's
+kernel-concentration diagnostics match D28's Gram measurements to reported precision
+(mean off-diag 0.0484 / 0.0384 / 0.0706 for reps=1-diagnostic / spec / val-selected), and the
+spec-scale kernel is again inverted on held-out flightlines (test 0.4017 against val 0.6872).
+
+**The fairness conditions this note demanded were met before the table was written.** Every
+cheap arm carried a val-only sweep (OCSVM γ/ν grid of 12, SVC C/γ of 9, AE latent widths, RX
+ridge); only VQC and QAE ran unswept, at frozen defaults, and both carry `swept=False` with the
+asymmetry stated in §4.5 rather than implied away. The tuned-kernel-vs-untuned-RX artefact D28
+warned about did not survive the sweep: RX still wins its unsupervised family at 0.7316 vs the
+best kernel configuration's 0.6815. The one arm above RX is supervised `classical_svc`, which is
+D27.3's supervision effect, not a detector effect.
+
+**F1 closed out as predicted.** At ~0.4 % natural prevalence under recall-first calibration,
+every arm lands at F1_MACRO ≈ 0.019–0.044 with precision ≈ prevalence — uninformative by
+construction, documented once (`docs/experiments.md` §4.6) so nobody reopens it. Shot noise was
+already closed (1024 shots ≡ exact to 0.0001 ROC-AUC).
+
+**What this branch claims now:** a scoped protocol result (§3E.8 as narrowed by D27.8) with a
+negative headline — compact quantum feature encodings, at 8 features on HAD100 under a
+leakage-controlled flightline split, do not beat an RX on the same features in simulation.
+No advantage claim (§13 rule 4), no ABU/HYDICE number (§13 rule 6 / D27.6), no hardware number
+(O1). `quantum/` was not modified for the run; the brief's rule that a failing run would be a
+finding never triggered — nothing failed.
+
+---
+
+### D30 — 3C built (2026-08-22). On constructed pairs, SAM + physics fusion beats both classical magnitude differencing and the learned Siamese arm on AUC and on pseudo-change suppression; the Siamese arm, at a modest training budget, is the worst of the three.
+
+**Every number below is SYNTHETIC-PAIRS.** There is no real bi-temporal hyperspectral pair on
+disk — HAD100 / ABU / HYDICE / Indian Pines are all single-epoch acquisitions, and the EnMAP
+download leg that could produce one is blocked (O11). The pairs used here are constructed: t1 is
+a real HAD100 AVIRIS-NG scene (`ang20170821t183707_1`, PCA-reduced to 30 components); t2 is the
+same scene after a known synthetic misregistration and §3C.1 co-registration, with 5 target
+spectra implanted (t2 only, via `segmentation/synth.py`'s linear mixing model) and a uniform
++12% illumination gain applied everywhere. **No number below may be quoted without that
+construction attached — it bounds what may be claimed, not just what is disclosed.**
+
+`change_detection/`: `spectral_angle.py`, `temporal_difference.py`, `physics_fusion.py`,
+`siamese_net.py`, `temporal_baseline.py`; `preprocessing/registration.py`,
+`preprocessing/cloud_mask.py`. Report: `experiments/change_arms/report.md`, raw:
+`experiments/change_arms/change_arms_results.json`. Registration residual RMSE on the synthetic
+shift: **0.000 px** — this validates the §3C.1 machinery on an exactly-known integer-pixel
+shift recovered sub-pixel-precisely, and says nothing about real-world misregistration
+robustness.
+
+**Results [SYNTHETIC-PAIRS].** AUC is threshold-free; pseudo-change rate is the fraction of
+illumination-only pixels scoring above the per-arm threshold that gives 95% recall:
+
+| Arm | AUC | Pseudo-change rate |
+|---|---|---|
+| Classical magnitude difference | 0.6179 | 0.7797 |
+| **SAM + physics fusion** (§3C.2/§3C.4) | **0.7651** | **0.6119** |
+| SiameseChangeNet (§3C.5, modest budget) | 0.5550 | 0.9242 |
+
+Two conclusions, both bounded by the construction above:
+
+1. **Physics fusion beats both the classical difference and the learned arm, on both metrics.**
+   It has the highest AUC and the lowest pseudo-change rate of the three — it discriminates the
+   implanted change better and is fooled less by the uniform +12% illumination gain, which is
+   the pseudo-change mechanism this test was built to probe.
+2. **The learned arm, at a modest budget, is the worst of the three.** SiameseChangeNet, trained
+   at the §3C.5-mandated modest budget (15 epochs, 48 training crops), scores below both the
+   physics arm and raw differencing on AUC, and has the highest pseudo-change rate of the three —
+   worse than magnitude differencing alone. Scaling data or epochs might close the gap; that is
+   outside this deliverable's scope, and the row is reported as measured, not tuned until it
+   flatters itself.
+
+**What this licenses and no more.** An arm ordering under a controlled illumination shift, on
+one constructed pair, from one scene — constructed-pair numbers, and therefore bounding what may
+be claimed. Nothing here speaks to real bi-temporal misregistration behaviour, to a different
+scene, or to the Siamese arm's ceiling at a larger budget; those require a real pair, and that
+remains blocked on O11.
+
+---
+
+### D31 — 3D built (2026-08-22). Both of its headline criteria came back negative: the ROI cascade misses its pixel-fraction target on the one scene it was run against, and quantization falls short of its ~12× literature target at 1.82×. No power or energy figure exists or may be quoted anywhere in this branch.
+
+`edge/`: `profiling.py`, `constrained_sim.py`, `streaming.py`, `quantization.py`,
+`onnx_inference.py`, `roi_pipeline.py`, `benchmark.py`. Doc: `docs/edge.md`. Everything in this
+branch is labelled `SIMULATED` — there is no Raspberry Pi and no instrumented hardware (§0.2,
+§9). **No power or energy figure appears anywhere in this branch, and none may be added**: no
+wattmeter exists, and an estimated wattage presented as measured would be a fabrication.
+
+**ROI-vs-full, ABU-Airport-1.** Stage-1 recall **0.9861** against a target of 0.98 — met.
+Stage-2 pixel fraction **3.69× the scene** (36 864 window-pixels vs. 10 000 scene pixels)
+against the accept criterion of <10% pixels at ≥0.98 recall — **NOT MET**. Reason:
+ABU-Airport-1 is 100×100; at patch=64 the full-scene grid is only 2×2 windows, and calibrating
+to 0.98 recall flags 87.8% of background pixels, each flagged connected component expanding to
+its own 64×64 window (`segmentation/infer.py`'s expand-don't-pad rule). Scattered false
+positives on a scene this small therefore cost more stage-2 windows than running the full grid
+would. **This is a property of scene size relative to patch size, not a defect in the cascade**
+— the cascade's economics only work on scenes large relative to the patch, and this scene is too
+small for the claim to hold.
+
+**Quantization of the pretext UNet.** Size reduction **1.82×** (7 770 837 B → 4 277 782 B)
+against a ~12× literature target — NOT MET. **INT8 was never applied; the run is FP16-only.**
+This was not an omission: uniform INT8 was rejected by design (it destroys covariance
+conditioning silently), and no INT8-safe subgraph of the UNet has yet been identified. The
+target is stated as not hit, not claimed, and not approached by a different route.
+
+**Both headline results are negative, and both are recorded as negative** — a stage-1 recall
+that meets its own target does not offset a stage-2 criterion that fails, and an FP16-only 1.82×
+does not round up toward a 12× target it did not attempt.
+
+---
+
+### D32 — O11 was wrong about the consequence, not the cause: the download leg's status was never re-tested, but 8 complete EnMAP L2A products were on disk the whole time. Phase 5 Level 2 built, run end-to-end, and its accept criterion is **MET — human QGIS check signed off 2026-08-23** (see the amendment at the end of this note).
+
+**What was found.** `data/raw/enmap/` holds 8 complete EnMAP L2A products (~3.6 GB, 40 files) —
+`SPECTRAL_IMAGE_COG.TIF` (the 224-band cube), `METADATA.XML`/`.XML.XML` (inconsistently named:
+1 of 8 uses the single suffix, 7 of 8 the double), and three quicklook/quality COGs per product.
+This was true on 2026-08-21, the same day O11 declared Phase 5 Level 2 "blocked" and the same day
+D16 opened one of these eight products' metadata for the interior-gap analysis. **The plan
+recorded a live-service access failure and reported it as a data-availability failure — those are
+not the same claim, and the files sitting in the repo the whole time is the proof.**
+
+**Verified, `scripts/verify_enmap.py` → `docs/enmap_verified.json`, all 8 products opened:**
+
+```
+band count        224                          uniform, all 8
+dtype              int16                        uniform, all 8
+nodata             -32768.0                     uniform, all 8
+GSD                30.0 m                       uniform, all 8
+CRS                EPSG:32642 x3, 32643 x3, 32644 x2   NOT uniform -- UTM zone follows longitude
+wavelength grid    418.416 - 2445.30 nm, 224 pts, strictly ascending, ALL FINITE
+                   byte-identical (SHA-256) across all 8 -- one grid, not eight
+GainOfBand         0.0001, uniform across all 224 bands x all 8 scenes (reflectance scale
+                   factor -- recorded, NOT applied by the loader: SceneMeta has no field for it,
+                   and this project's ABU rows already carry mixed radiometric scales unscaled)
+OffsetOfBand       0.0, uniform
+harmonize.coverage_ok   FALSE on all 8 -- reproduces D16's 8/184-uncovered finding exactly,
+                        independently re-derived here rather than assumed from that entry
+valid pixel fraction    mean 0.740, min 0.697 (DT0000207400, Ladakh), max 0.765 (DT0000207637)
+```
+
+**A cross-scene fact D16 did not have, because D16 verified metadata only, never the pixel
+cubes: 5 bands are nodata for effectively 100% of the scene, constant across all 8 products.**
+Bands 131-135 (wavelengths 1342.82-1390.48 nm, the edge of the 1350-1450 nm water-absorption
+window) are >99.9% nodata in a fast decimated (4x downsample) scan across every one of the 8
+scenes, and confirmed 100% nodata at FULL resolution on DT0000207637 specifically: `load_scene`
+reads the entire cube (no decimation) and the loader's own `np.all(np.isnan(cube.reshape(-1, b)),
+axis=0)` check returns exactly `[131, 132, 133, 134, 135]` on it. (A separate, slower
+band-by-band full-resolution scan of all 8 products, reading one band at a time via `ds.read(i)`,
+was also attempted for independent cross-confirmation; it was still running after several minutes
+and was killed rather than waited out -- the decimated scan and the loader's own full-resolution
+check above are what this finding actually rests on, not that abandoned attempt.) This is a
+*different* failure mode from the ~30% border nodata every
+band carries: a band that is nodata at literally every pixel poisons `preprocessing.normalize.
+standardize`'s per-band `nanmean`/`nanvar` (NaN for that band, at every pixel), which then
+poisons `anomaly.rx.global_rx`'s `~np.any(np.isnan(flat), axis=-1)` validity mask -- every pixel
+in the scene loses at least one band to NaN, so the valid set drops to **zero**, and
+`scipy.linalg.cho_factor` raises `ValueError: array must not contain infs or NaNs`. Caught by
+attempting the actual pipeline run below, not by inspection.
+
+**Locations** (from WGS84 bounds, all 8): 4 scenes over coastal/inland Tamil Nadu (DT0000206446,
+207637, 207645, 207657), 2 over the Thar Desert, Rajasthan (206449, 207633), 1 over Ladakh/
+Karakoram (207400), 1 over the Hindu Kush border region (205561).
+
+**Loader extended, `preprocessing/raster_loader.py`, dispatch reused not forked.** `load_scene`'s
+existing `.tif` branch now recognises a filename ending `-SPECTRAL_IMAGE_COG.TIF` with
+`source="enmap"` and additionally parses the sidecar `METADATA.XML`(`.XML`)'s
+`<bandCharacterisation>/<bandID>/<wavelengthCenterOfBand>` into `meta.wavelengths`, and
+`<startTime>` into `meta.acquired`. Strict by construction: a missing sidecar, unparseable XML, a
+band-count mismatch against the cube, or a non-finite/non-ascending wavelength axis all raise
+(D11.4) rather than falling back to `wavelengths=None`. Nodata handling is the EXISTING generic
+`.tif` path unchanged (`ds.nodata` -> NaN, dtype-safe cast, D13.2) -- no new code was needed
+there, because the COG already carries `-32768.0` as a real GDAL nodata tag. **One generic
+addition, not EnMAP-specific:** any `.tif` load now detects bands that are NaN at every pixel and
+marks them `bad_bands=True`, re-derived from the actual pixels on every load rather than
+hardcoded to indices 131-135 -- so `drop_bad_bands` (already unconditionally the first stage of
+`pipeline/run_pipeline.py`) removes them before `standardize`/`global_rx` ever see them. This is
+what turned the `cho_factor` crash above into a clean run.
+`tests/test_enmap_loader.py` (11 tests, all new): the happy path on both metadata-filename forms,
+the three specified must-fail cases (missing sidecar, unparseable XML, non-monotonic/NaN
+wavelength axis), a band-count-mismatch guard, the fully-nodata-band fix with an end-to-end
+`drop_bad_bands` + `standardize` regression check, a real-file smoke test, and a named regression
+guard proving `source="enmap"` alone (without the real filename suffix) does NOT trigger the
+sidecar path -- the two pre-existing tests that call `load_scene(..., source="enmap")` on
+synthetic fixtures with no sidecar (`test_loader.py`, `test_pipeline_e2e.py`) still pass
+unchanged. Full suite: 491 passed, 0 failed (`pytest -q`, 2026-08-23).
+
+**Phase 5 Level 2 run.** Scene picked: **DT0000207637** (2026-07-24 acquisition, Kanyakumari
+district, Tamil Nadu, EPSG:32643) -- the task brief's "highest valid fraction, least cloud" rule
+selects it outright: it has both the single highest valid-pixel fraction of the 8 (0.765) and is
+tied for lowest cloud cover (0%, shared only with the Thar Desert scene DT0000206449, valid
+0.729). No tiebreak was needed on the stated criteria. It is also, independently, the better pick
+for what the accept criterion actually needs -- a human identifying a real-world feature against
+a basemap -- since a coastal/inhabited scene offers coastline, roads and field boundaries where
+a desert interior mostly does not; this reinforces the choice rather than deciding it.
+
+**The full scene did not fit in memory, confirmed by the kernel, not estimated.** The full cube
+is 1166 x 1373 x 224 int16 (~1.7 GB as float32); `run_pipeline` holds the loaded cube and its
+standardized copy simultaneously, and `anomaly.rx.global_rx` promotes the flattened cube to
+float64 and holds three-plus arrays of that promoted size alive at once (`flat`, `centered`,
+`dv`, `solved`) -- the same class of problem D17 already documents for this machine (13 GB RAM,
+**no swap**). The first full-scene attempt was killed by the kernel OOM killer:
+`Out of memory: Killed process 593241 (python) total-vm:11359244kB, anon-rss:8662280kB` -- no
+Python traceback, exit code silently absorbed by the shell, exactly D17's failure signature
+reproduced on a different array. **Per this task's own instructions, a windowed crop is
+legitimate here provided it is real and labelled as a crop, never silent about it being one.** A
+600x402-pixel window (rows 380-980, cols 970-1372 of the full 1166x1373 scene) was cut with
+`rasterio` reading a `Window` and `rasterio.windows.transform` for the sub-affine -- CRS and pixel
+size unchanged, origin shifted, still `georef == "real"`. The crop's own valid fraction (0.749)
+and a crude NIR threshold confirmed it straddles a stretch of coastline (~13% water-like pixels)
+plus inland terrain before committing to it. Written to `experiments/phase5_level2/…
+_CROP600x402-SPECTRAL_IMAGE_COG.TIF` with a copy of the original product's METADATA.XML.XML
+alongside it (spectral/radiometric characteristics are scene-wide and unaffected by a spatial
+crop, so reusing the same sidecar content is correct, not a shortcut). Peak RSS on this run:
+**829 MB** -- roughly 10x smaller than the full-scene attempt's peak, confirming the crop, not
+luck, is what fit.
+
+`pipeline/run_pipeline.py --source enmap --detector global_rx --threshold-pct 99.0 --profile
+object` ran to completion, unmodified, end to end: load (parses the sidecar, marks 5 bad bands) ->
+`drop_bad_bands` (224 -> 219 bands) -> `standardize` -> `global_rx` -> `percentile_normalize` ->
+threshold (99th pct) -> `morphological_cleanup` -> `mask_to_rois` -> `rois_to_geojson` ->
+`validate_geojson` (passed; `run_pipeline` calls it internally and would have raised on any C6
+violation). **33 ROIs.** Outputs in `experiments/phase5_level2/`: `..._anom_raw.tif`,
+`..._anom_norm.tif`, `..._mask.tif`, `..._rois.geojson`, `run_manifest.json` (git SHA
+`4f47a40…`, package versions, per-stage timings -- `detector` stage 1.88 s). QGIS project built
+via the EXISTING `scripts/build_qgis_project.py`, extended with one more `build(...)` call on the
+same pattern as `demo_verify` (magma 0-1 raster, red-outline labelled ROIs, OpenStreetMap
+basemap, real CRS as the project CRS): `qgis/projects/phase5_level2_verify.qgz`, 33 ROIs, CRS
+EPSG:32643.
+
+**Forward-compat gap, not a bug today (D17's template).** The loader now parses the scene's real
+acquisition time into `meta.acquired` (`2026-07-24T05:43:07…Z`, from METADATA.XML's
+`<startTime>`) -- but it goes nowhere. `rois_to_geojson`'s C6 `timestamp` field defaults to
+`datetime.now(timezone.utc)` when the caller passes none, and `run_pipeline` calls it without the
+`timestamp` kwarg, so every feature in `..._rois.geojson` carries the RUN date
+(`2026-08-22T21:45:26Z`), not the scene's acquisition date. Nothing here is EnMAP-specific and
+nothing was changed to fix it -- `run_pipeline.py` is the file this task was told to run
+unmodified, not rewrite, and every other source has the identical gap (`meta.acquired` is `None`
+for `.mat` sources and unused for `.hdr` HAD100 scenes too). Flagged here because this is the
+first product whose real acquisition date is both known and would matter to a reader: a Level 2
+GeoJSON is exactly the kind of output where `timestamp` reads as "when this happened," not "when
+this was processed."
+
+**Automatic metrics — everything computable without a human, `experiments/phase5_level2/
+level2_metrics.json`:**
+
+```
+GSD                            30.0 m
+ROI count                      33
+ROI area (m^2)                 min 4 491   median 10 778   max 194 010
+ROI area (px, /900 m^2)        min ~5      median ~12      max ~216
+scene bounds (WGS84)           lon [78.037, 78.148]  lat [8.411, 8.573]
+corner round-trip error        0.0 m EXACTLY (world -> pixel -> world on all 4 scene corners --
+                                pure affine invertibility, no interpolation involved)
+centroid round-trip error      mean 10.06 m (0.335 GSD)   max 21.21 m (0.707 GSD)
+                                (WGS84 centroid -> native CRS -> pixel row/col -> pixel-center
+                                world coordinate; this is the natural sub-pixel offset of an
+                                irregular blob's centroid within its containing pixel, not error
+                                in the transform -- both figures stay under 1 GSD, as they must
+                                for an exact affine)
+```
+
+**What remains — a HUMAN step, explicitly not performed here.** The accept criterion (§8, quoted
+in the task brief) is *"polygon centroids for a manually identified feature land within 2 pixels
+(~2 GSD) of its true position, verified in QGIS against an independent basemap."* No agent can
+perform this. Open `qgis/projects/phase5_level2_verify.qgz` in QGIS, identify a real-world feature
+(coastline bend, road junction, field boundary, built structure) visible in the OpenStreetMap
+basemap near one of the 33 ROI outlines, and check whether the ROI's position lands within
+2 pixels (~60 m at 30 m GSD) of that feature's true position. **Phase 5 Level 2 is NOT marked
+accepted by this entry.** Everything automatable is done and reported above; the QGIS-against-
+basemap eyeball is the one thing left, exactly as the criterion requires a human for.
+
+**STRETCH (attempted, not forced) — `edge/benchmark.py`'s ROI-vs-full comparison on an EnMAP
+scene.** D31 found the `<10%-pixels @ 0.98-recall` criterion failed on ABU-Airport-1 (100x100,
+barely larger than the 64-px patch) and asked whether a ~140x-larger EnMAP scene changes that.
+**Not attempted, for two independent, confirmed reasons, neither worked around:**
+1. `edge.roi_pipeline.roi_vs_full_comparison(cube, meta, gt, detector, seg_model, …)` takes `gt`
+   (ground truth) as a **required** argument — by design, per its own docstring ("Labels are
+   REQUIRED — this function exists to test a labelled claim, not to fabricate one"). EnMAP L2A is
+   real satellite imagery with no anomaly ground truth of any kind; ABU/HYDICE ship a `map`
+   variable precisely because they are curated anomaly-detection benchmarks, and EnMAP is not.
+2. Independently fatal even with a `gt`: the trained `LightUNet`'s PCA transformer
+   (`experiments/seg_arch/reduce_bands_transformer.pkl`) has `n_features_in_ == 184` — it was
+   fit on the canonical 184-band harmonized grid. Confirmed directly: `harmonize()` on the EnMAP
+   crop (post-`drop_bad_bands`, 219 native bands) raises the exact D11.6 `coverage_ok` error D16
+   already predicted. Bypassing `harmonize()` to force a 184-band shape some other way would
+   violate §3A.9/D15's rule that a model must be scored on the same basis it was fit on — the
+   same class of leakage D15 closed for `reduce_bands`, one level up.
+A clean "not attempted, because X" — no number fabricated, no tuning, no power/energy figure
+anywhere in this entry.
+
+**ACCEPT SIGNED OFF 2026-08-23 — the human QGIS check was performed and passed.** The step D32
+above correctly refused to perform or claim has now been done by the project owner against
+`qgis/projects/phase5_level2_verify.qgz`, with the OpenStreetMap basemap loaded: the EnMAP crop's
+coastline registers against OSM's coastline at the Kudiraimozhi / Kulasekharapatnam stretch of
+the Tamil Nadu coast, and at 1:26 000 the ROI outlines wrap the bright pixels of the anomaly
+raster rather than sitting beside them. **§8 Level 2's accept criterion — "polygon centroids for
+a manually identified feature land within 2 pixels (~2 GSD) of its true position, verified in
+QGIS against an independent basemap" — is MET, and Phase 5 Level 2 is CLOSED.** This is the first
+accept criterion in the project verified against a real-world independent reference rather than
+against the raster's own affine; the automatic round-trip figures in D32 (corners exactly 0.0 m,
+centroids <=0.707 GSD = the half-pixel diagonal, i.e. pure pixel-centre quantisation) said the
+affine plumbing was right, which is a strictly weaker claim and was labelled as such.
+
+**One cosmetic defect found by the same eyeball, recorded not fixed:** every ROI in the QGIS
+project is labelled with the full ~90-character product filename
+(`ENMAP01-____L2A-DT0000207637_..._CROP600x402-SPECTRAL_IMAGE_COG:anomaly:0015`), which makes the
+map unreadable at any zoom. The label expression in `scripts/build_qgis_project.py` uses the
+layer-qualified id where the bare `roi_id` (or its numeric tail) is what a reader needs. Cosmetic,
+not a data error -- the geometries and attributes are correct -- but it is the surface a
+demo audience sees, so it is logged here rather than left to be rediscovered.
+
+---
+
+### D33 — every GeoJSON this project has ever emitted carried the RUN date, not the acquisition date. Found while closing D32, fixed 2026-08-23. The bug survived because the wrong value and the only available value were the same string.
+
+`geospatial/geojson.py`'s `rois_to_geojson` defaulted its C6 `timestamp` field to
+`datetime.now(timezone.utc)` whenever the caller passed none -- and **no caller passes one**:
+`pipeline/run_pipeline.py`, `pipeline/demo.py` and `edge/roi_pipeline.py` (x2) all call it
+without the kwarg. So `timestamp` recorded when the pipeline ran, while every reader of a C6
+record -- and the field's own name -- takes it to mean when the scene was observed.
+
+**Why it went unnoticed through Phase 2, Phase 4, the demo and Phase 5 Level 1.** Until EnMAP,
+no loader populated `SceneMeta.acquired`: it is `None` for every `.mat` source and unused for
+HAD100's `.hdr` scenes. With no acquisition time available anywhere, the run date was
+simultaneously the wrong answer and the only answer, and every test that asserted the field was
+a well-formed ISO-8601 string passed. **This is the D22.2/D28 pattern in a new place: a check
+that passes for the wrong reason.** The EnMAP loader (D32) is the first to parse a real
+`<startTime>`, which is what made the gap observable rather than merely present.
+
+**Why it had to be fixed before Phase 5 Level 3 rather than after.** Level 3 is *the
+multitemporal case study* -- its entire premise is comparing dated observations against known
+dated events. Correctly-detected change stamped with the processing date is not a cosmetic
+blemish there; it is the load-bearing field being silently wrong, and every Level 3 conclusion
+would rest on it.
+
+**The fix, and what it deliberately does not do.** `_resolve_timestamp(timestamp, meta)`:
+an explicit caller argument wins; otherwise `meta.acquired`, normalised to UTC in C6's
+`%Y-%m-%dT%H:%M:%SZ` form (EnMAP's `<startTime>` carries sub-second precision, and an offset-bearing
+ISO string is converted, not truncated); the run date is used **only** when the source genuinely
+has no acquisition time, because C6 requires *some* string. A malformed `meta.acquired`
+**raises** rather than falling back -- silently substituting `now()` would restore exactly this
+bug for the one source most likely to hit it. **No C6 field was added:** `C6_PROPERTIES` is
+frozen at exactly 16 (Roadmap §2's 10 + D5's 6), and §2's rule that no branch may redefine a
+frozen contract locally binds this fix too, so the GeoJSON does not record *which* of the two
+sources the timestamp came from.
+
+**Verified by regression, not by assertion.** Five tests in `tests/test_geospatial.py`; four of
+them **fail** against the previous behaviour and pass against the fix (confirmed by reverting the
+resolver and re-running, not assumed). The fifth -- the `acquired is None` fallback -- passes
+under both, correctly: that is the one case where old and new behaviour agree.
+
+**Phase 5 Level 2's GeoJSON was regenerated** and now carries `2026-07-24T05:43:07Z` on all 33
+features, matching the product's own `20260724T054307Z`. Geometry is byte-unchanged, so the QGIS
+sign-off above still stands. Existing committed GeoJSONs elsewhere (`experiments/phase2/`,
+`experiments/demo/`) still carry run dates from sources with no acquisition time -- for those the
+run date remains the only available value, and re-running them would change nothing.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
@@ -3090,9 +3469,9 @@ interesting one.
 | tier | scope | rationale |
 |---|---|---|
 | **P0 — ship this** | finish `3B` (`train_unet` → `infer`) · `local_rx` · `kernel_rx` · `crd` · `streaming_rx` · `fusion` · **Phase 4** · **Phase 5 Level 1** · **Phase 7 `demo.py`** | the critical path plus the benchmark that makes it defensible and the demo that makes it presentable. A working, benchmarked, demoable system. |
-| **P1 — if P0 is done** | `3D`: `profiling` · `constrained_sim` · `roi_pipeline` · `benchmark` · **Phase 6 Tier A** | edge story; simulated only, and §9 forbids reporting power |
-| **P2 — genuinely optional** | `3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net` — and ~~`3E`: the whole quantum arm~~ (**3E BUILT 2026-08-22, D27**) | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
-| **P3 — deferred, do not start** | `train_alt_arch` · `deep_detector` · `autoencoder` · `quantization` · `onnx_inference` | architecture comparison and deployment polish. Valuable, not load-bearing. |
+| **P1 — if P0 is done** | ~~`3D`: `profiling` · `constrained_sim` · `roi_pipeline` · `benchmark`~~ (**3D BUILT 2026-08-22, D31**) · **Phase 6 Tier A** | edge story; simulated only, and §9 forbids reporting power |
+| **P2 — genuinely optional** | ~~`3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net`~~ (**3C BUILT 2026-08-22, D30**) — and ~~`3E`: the whole quantum arm~~ (**3E BUILT 2026-08-22, D27**) | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
+| **P3 — deferred, do not start** | `train_alt_arch` · `deep_detector` · `autoencoder` · `quantization` · `onnx_inference` (**`quantization` and `onnx_inference` were built anyway, as part of 3D, 2026-08-22, D31** — a divergence between this designation and the tree, recorded here rather than silently left) | architecture comparison and deployment polish. Valuable, not load-bearing. |
 | **BLOCKED — never start** | Phase 6 **Tier B** | no instrumented hardware exists (§0.2, §9). Not a scheduling choice. |
 
 **P0 STATUS, 2026-08-22.** Built and tested unless noted:
@@ -3101,14 +3480,43 @@ interesting one.
 |---|---|
 | `3B` train → infer | **done.** `unet_pretext` trained to convergence (40 epochs, best val 0.1243 @ epoch 27, 5.1 h local GTX 1650). `infer.segment_rois` + profile-driven `postfilter` built. **Only 1 of §3B.8's 5 arms is trainable** — three suspended pending O9 (D19), `unet_implanted_lib` blocked on D21. |
 | `local_rx` · `kernel_rx` · `crd` · `streaming_rx` | **done.** Three regularization defects found and fixed along the way (D22, D22.2, D24); `crd` checked and cleared (D22.3). |
-| `fusion` | **done**, component-adaptive per D20. **Default weights do NOT meet §3A.9's accept criterion** — the grid search is still owed (D22.1). |
+| `fusion` | **done**, component-adaptive per D20. **Default weights do NOT meet §3A.9's accept criterion.** The grid search D22.1 called for was run and does not rescue it (D25) — the criterion is recorded as failed, not owed. |
 | Phase 4 | **done.** §4.1 registry accepts a config-only detector swap; §4.2 `calibrate_threshold_for_recall` returns `(threshold, fp_rate)`. §4.3 `roi_fusion` built. |
-| Phase 5 L1 | in progress — harness + `cascade_recall_audit`. |
-| Phase 7 `demo.py` | in progress. Runs on **HAD100, not EnMAP** (O11); steps 10–11 skip with a stated reason, since 3C and 3E are P2 and unbuilt. |
+| Phase 5 L1 | **done.** Harness + `cascade_recall_audit` built and populated (`experiments/cascade_recall_audit/`). |
+| Phase 7 `demo.py` | **done.** Runs on **HAD100, not EnMAP** (O11). Step 10 (temporal t1-vs-t2) **RUNS**, labelled `SYNTHETIC-PAIRS` throughout (3C is built, D30). Step 11 (classical-vs-quantum) still **skips** — not because 3E is unbuilt (it is, D27/D29) but because its comparison results are owned by the quantum branch and §13 rule 4 permits only a scoped novelty claim, never a quantum-advantage one; the demo is deliberately not wired to reproduce it. |
 
-**The one thing P0 still owes beyond the two in progress:** §3A.9's fusion weight grid search
-(D22.1), including carving out and naming the tuning split — ABU is 13 scenes, so tuning and
-reporting on the same 13 is train-on-test.
+**§3A.9's fusion weight grid search was discharged by D25** (2026-08-22): 728 weightings,
+selected on a named 5-scene TUNE split and evaluated on the 8-scene REPORT split never touched
+during selection (`experiments/rx_vs_ae/fusion_weights.json`), so tuning and reporting no longer
+share ABU's 13 scenes. **The criterion itself failed** (5/8 report scenes vs. the required 10/13,
+under either the fixed-component or oracle reading) — D25 records the failure and states plainly
+what may and may not be claimed about fusion. With Phase 5 L1 and Phase 7 `demo.py` both now
+done (above), **P0 owes nothing further.**
+
+**Correction, 2026-08-23 (D32): Phase 5 Level 2 was never permanently blocked, and is no longer
+blocked at all.** The line below originally listed it alongside Phase 6 Tier B and 3E.7 as
+"permanently-blocked" on the strength of O11's now-corrected framing. It has since been built and
+run end to end on one EnMAP scene — 8 complete EnMAP L2A products were on local disk the whole
+time (D32) — and only the human QGIS-against-basemap step remains, which is a genuine external
+wait (see below), not a block on further building. The paragraph that follows is left as
+originally written, with only this framing corrected: Level 3, not Level 2, was already correctly
+identified as buildable, but Level 2 turns out to have been buildable too, and the set of
+"permanently-blocked" items shrinks to Phase 6 Tier B and 3E.7.
+
+**The project's main remaining buildable work is Phase 5 Level 3 (added 2026-08-23).** Unlike
+the permanently-blocked items — Phase 6 Tier B (O2, no Pi) and 3E.7 (O1, no IBM Quantum account)
+— Level 3 (§8, around the Sentinel-2 multitemporal case study) is **not blocked**. CDSE credentials are configured
+(`scripts/check_credentials.py` → exit 0, per `docs/buildable_now.md` §1; this confirms
+configuration, not that the download leg itself succeeds — O10 notes an expired-but-present key
+looks identical to a working one until a real request is made). 3C, now built, delivers every
+processing component §8 Level 3's pipeline line calls for: cloud mask, registration, temporal
+baseline, SAM + physics fusion, and ROI → GeoJSON → QGIS. What is actually missing is (1) a
+Sentinel-2 fetcher — no `scripts/fetch_sentinel2.py` exists in this tree — and the case-study run
+itself, (2) **O5**, choosing a dated-event site, and (3) §8.0's `verify_phase5_datasets.py` pass
+on Sentinel-2, which §15 still lists in the documentation-only tier ("Level 3 only") — no file
+has been opened, so band subset, resolution mixing, and no-data handling remain unverified per
+this project's own standard. Level 3's reporting constraint (§8, Roadmap §1.9/§9.7) is unchanged
+and applies in full to whatever this produces.
 
 **Why this order.** Six half-finished arms score worse than one complete system with its gaps
 documented. §9 and §14 already record what is simulated and what is deferred; deferring
@@ -3120,8 +3528,9 @@ contributor can take them without touching the critical path. They are P1/P2 for
 holding the critical path, not for everyone.
 
 **Nothing in P0 depends on another human.** Every input it needs is on disk. The only external
-waits in the whole project are the QGIS eyeball on Phase 2, the SWIRB verification in D16, and
-Phase 6 Tier B — none of which block P0.
+waits in the whole project are the QGIS eyeball on Phase 2, the QGIS eyeball on Phase 5 Level 2
+(D32, added 2026-08-23), the SWIRB verification in D16, and Phase 6 Tier B — none of which block
+P0.
 
 **Hard ordering constraint (D11.3):** `harmonize` is not merely *upstream* of the background pool — it is the **join** that makes the pool a single tensor. AVIRIS-NG reduces to 276 bands and AVIRIS-Classic to 162, so `HAD100 download → main.py unpack → harmonize → pool → 3B.synth`. Pooling before harmonizing does not raise; it just cannot be stacked, and the first person to hit it will assume the download is corrupt.
 **Longest pole:** 3B, because it depends on both `harmonize` and the HAD100 background pool download.
@@ -3138,6 +3547,7 @@ Phase 6 Tier B — none of which block P0.
 | `test_env.py` | Python 3.12, all imports, GDAL version |
 | `test_contracts.py` | every C1–C6 validator, one pass + one fail each |
 | `test_loader.py` | `.mat` / `.tif` / `.hdr` dispatch, synthetic-affine flag, tag round-trip, **HAD100 `.hdr` → `georef == "real"`**, and **D13.2 dtype safety**: an int16 fixture containing `-1` loads as `-1.0` and never `65535.0` (the evidenced hazard); a uint16 fixture containing `40000` loads as `40000.0` and never `-25536.0` (the unevidenced-but-guarded reverse); an unhandled dtype raises rather than silently casting |
+| `test_enmap_loader.py` (built, D32) | The `-SPECTRAL_IMAGE_COG.TIF` sidecar-parsing path: happy path on both `-METADATA.XML`/`.XML.XML` filename forms; MUST-FAIL cases — missing sidecar, unparseable XML, non-monotonic wavelength axis, NaN-poisoned wavelength axis, sidecar/cube band-count mismatch; a band that is nodata at every pixel is marked `bad_bands=True` and `drop_bad_bands` + `standardize` leaves no fully-NaN band behind (the real failure this fix closes, D32); a named regression guard that `source="enmap"` ALONE, without the real filename suffix, does not trigger the sidecar path (protects the two pre-existing `load_scene(..., source="enmap")` fixtures in `test_loader.py`/`test_pipeline_e2e.py`); a real-file smoke test, `skipif`-guarded |
 | `test_benchmarks.py` | D13 invariants: Indian Pines has no georeference key (D2's premise); ABU is 13 scenes / 4-4-5 with the recorded per-scene band counts; HYDICE is 80×100×175 with 21 anomaly px — the anomaly scene, not the unmixing one (D13.3). |
 | `test_harmonize.py` (built, D15) | **D9 band arithmetic pinned:** `len(CANONICAL_WL) == 211`, `water_mask().sum() == 27`, retained `== RETAINED_BANDS == 184`. **D11.4:** a real AVIRIS-Classic wavelength array sorts to strictly increasing (`sort_spectral_axis`); a NaN-poisoned wavelength array raises rather than silently sorting to a non-monotonic axis. **D11.3, the join:** real NG (425) and Classic (224) raw scenes both `harmonize` to `shape[-1] == RETAINED_BANDS == 184` and stack into one array. **D11.6, self-defending:** `coverage_ok` is True for both raw sensors (reproduces the plan's measured 0/184 uncovered) and False for a reconstructed `band_select`-style gapped axis (reproduces 43/184 uncovered exactly), and `harmonize` on that gapped axis raises rather than emitting a plausible-looking partly-fabricated cube. **Interpolation correctness:** the gather-based production path is cross-checked against `np.interp` directly. **NaN locality (D15):** a single poisoned source band propagates NaN only to the ≤2 target bands that actually bracket it, not to all 184 — the regression test for the matmul-vs-gather bug D15 found and fixed. |
 | `test_scoring.py` | percentile + rank normalization, invertibility, NaN handling |
@@ -3184,11 +3594,11 @@ Train/test leakage would invalidate every number in the report, and it is the ki
 | O2 | **Raspberry Pi 5 procurement** | Not owned. Gates Phase 6 Tier B. | Everything ships as `SIMULATED`. |
 | O3 | **FPGA/NPU comparison device** | Not owned. Gates the accelerator arm. | The arm is dropped from the report and stated as dropped, not silently omitted. |
 | O10 | **Credential expiry** | CDSE S3 key pairs are created with a caller-chosen expiry date (§4.1b). An expired key fails Phase 5 Level 3 at the download leg, and the symptom looks like a service outage rather than an auth problem. | Choose a long expiry at creation; diarise it. `scripts/check_credentials.py` reports configuration but **cannot** detect an expired-but-present key — only a real request can. Re-check before Phase 5. |
-| O11 | **EnMAP download entitlement — CONFIRMED, blocking Phase 5 L2** | Resolved from open question to established fact on 2026-08-21 by `scripts/verify_access.py`. The account authenticates: a CAS login naming **no service** returns **HTTP 200 with a TGC cookie**. The *same* credentials in a login naming the EnMAP download service return **401**, and an HTTP-Basic request to the asset returns **403** whose body reads *"insufficient privileges to download this dataset"*. CAS authorises **per service**, so a missing entitlement is byte-indistinguishable from a wrong password unless the two logins are compared — which cost this project an hour of misdiagnosis. EnMAP archive access needs a **role assignment** via the Instrument Planning Portal, and `planning.enmap.org` / `enmap-planning.eoc.dlr.de` resolve in DNS but **refuse TCP connections**. §2.1 makes EnMAP half the background pool, so Phase 5 Level 2 is blocked until this clears. | **Diagnosis refined 2026-08-21.** There is no separate "EnMAP Access Service account": the register link on the EnMAP login page points at the *same* `sso.eoc.dlr.de/geoservice/selfservice` registration, so one account covers both. The EnMAP Access Service was subscribed in the Geoservice Permission Management App (`/eoc/kc/realms/geoservice/account/#/permissions`) and still shows in *Permissions you are subscribed to*, yet CAS continues to deny the service. Authentication succeeds and **authorization** fails — the browser error reads *"Service access denied due to missing privileges… you are actually logged into another of our services with another account."* Note the two systems: permissions live in **Keycloak** (realm `geoservice`), the download wall is **CAS** (`/eoc/auth/login`); a stale session in one can shadow the other, so test in a window with no other DLR tab open. 1. If it persists, contact **`eoc-ums-helpdesk@dlr.de`** (the address the login page itself gives for user-management problems) — *not* `erdbeobachtung@dlr.de`, which handles the 5 000-product contingent, a different question. 2. Re-run `scripts/verify_access.py` — it PASSes only on real TIFF magic bytes. 3. **Until it passes, build the background pool from AVIRIS-NG alone** and mark every affected §3B row accordingly. Do not write Level 2 code against assumed EnMAP access. |
-| O12 | **SpectralEarth — candidate for the self-supervised arm** | The EOC Geoservice EnMAP catalogue (`geoservice.dlr.de/web/datasets/enmap`) holds four collections, not one. Besides L2A: **SpectralEarth** — 538 974 patches / 415 153 locations / 11 636 EnMAP scenes, ~3.3 TB, built expressly for self-supervised hyperspectral pretraining (arXiv 2408.08447) — and **HyBiomass** (EnMAP L2A + GEDI L4A labels). §5.2's masked-band SSL arm currently pretrains on the local background pool; SpectralEarth is the same idea three orders of magnitude larger. Caveats: it is **non-georeferenced** (fine for pretraining, useless for the geospatial arm), it is 3.3 TB against 7.8 GB currently on disk so only a subset is usable, and it sits behind the **same** EnMAP Access Service wall as L2A (verified 2026-08-21: all of L2A, SPECTRAL_EARTH and HYBIOMASS redirect to the same CAS login), so O11 blocks it too. **L0 Quicklooks is open with no login at all** (HTTP 200) but ships quicklooks and quality masks, not cubes — no use as a background pool. | Decide only after O11 clears and after §8.0 verifies EnMAP band/wavelength facts. Check `github.com/AABNassim/spectral_earth` for a subset or mirror first — a 3.3 TB pull is out of scope regardless. Do not let a foundation-model detour displace the critical path in §11. |
+| O11 | **EnMAP download entitlement — the CONSEQUENCE drawn from this was wrong. Corrected 2026-08-23 (D32): 8 complete L2A products were already on local disk, and Phase 5 Level 2 has now been run.** | The entitlement-denial diagnosis immediately below (CAS 401/403, refined 2026-08-21) describes the live DOWNLOAD LEG and is **left exactly as recorded — neither confirmed nor retracted by this correction**, because it was never re-tested here (see the right-hand column). What was false is the inference drawn from it: eight complete EnMAP L2A products (~3.6 GB, 40 files, `data/raw/enmap/`) were sitting on disk on 2026-08-21 — the *same day* this row declared Phase 5 Level 2 "blocked" and the *same day* D16 opened one of those eight products' metadata. The files were never inaccessible; only the live download path was in question, and that question was never the same as "can Level 2 run." `scripts/verify_enmap.py` (2026-08-23) opened and validated all 8 products directly: 224 bands, int16, nodata −32768.0, GSD 30 m — uniform across all 8; CRS varies by scene footprint (EPSG:32642 ×3, 32643 ×3, 32644 ×2); wavelength grid byte-identical (SHA-256) across all 8, 418.416–2445.30 nm, strictly ascending; `harmonize.coverage_ok == False` on all 8 (8/184 canonical bands uncovered), reproducing D16 exactly. Phase 5 Level 2 then ran end-to-end on one scene — see **D32** for the run, its numbers, and what still needs a human. *(Original 2026-08-21 text, preserved below rather than deleted:)* Resolved from open question to established fact on 2026-08-21 by `scripts/verify_access.py`. The account authenticates: a CAS login naming **no service** returns **HTTP 200 with a TGC cookie**. The *same* credentials in a login naming the EnMAP download service return **401**, and an HTTP-Basic request to the asset returns **403** whose body reads *"insufficient privileges to download this dataset"*. CAS authorises **per service**, so a missing entitlement is byte-indistinguishable from a wrong password unless the two logins are compared — which cost this project an hour of misdiagnosis. EnMAP archive access needs a **role assignment** via the Instrument Planning Portal, and `planning.enmap.org` / `enmap-planning.eoc.dlr.de` resolve in DNS but **refuse TCP connections**. | **Whether the download leg itself works TODAY is a separate, still-untested question.** CLAUDE.md scopes credential/network checks out of the work that produced this correction, so `scripts/verify_access.py` was **not** re-run here — this entry neither confirms nor denies that the entitlement has cleared since 2026-08-21. What changed is that **Phase 5 Level 2 no longer depends on the answer**: the data it needs is already on disk, verified, and run. If the download leg is later confirmed working, that only matters for *acquiring more* EnMAP scenes (extending the 8 already in hand) or for O12/SpectralEarth below — not for whether Level 2 can proceed. *(Original diagnosis notes, preserved:)* There is no separate "EnMAP Access Service account": the register link on the EnMAP login page points at the *same* `sso.eoc.dlr.de/geoservice/selfservice` registration. Permissions live in **Keycloak** (realm `geoservice`), the download wall is **CAS** (`/eoc/auth/login`); a stale session in one can shadow the other. If pursued further: contact **`eoc-ums-helpdesk@dlr.de`**, and re-run `scripts/verify_access.py` (PASSes only on real TIFF magic bytes). |
+| O12 | **SpectralEarth — candidate for the self-supervised arm.** Status note added 2026-08-23 (D32): **O11's correction says nothing about this row.** | The EOC Geoservice EnMAP catalogue (`geoservice.dlr.de/web/datasets/enmap`) holds four collections, not one. Besides L2A: **SpectralEarth** — 538 974 patches / 415 153 locations / 11 636 EnMAP scenes, ~3.3 TB, built expressly for self-supervised hyperspectral pretraining (arXiv 2408.08447) — and **HyBiomass** (EnMAP L2A + GEDI L4A labels). §5.2's masked-band SSL arm currently pretrains on the local background pool; SpectralEarth is the same idea three orders of magnitude larger. Caveats: it is **non-georeferenced** (fine for pretraining, useless for the geospatial arm), it is 3.3 TB against 7.8 GB currently on disk (unchanged figure -- not re-verified here) so only a subset is usable, and it sits behind the **same** EnMAP Access Service wall as L2A (verified 2026-08-21: all of L2A, SPECTRAL_EARTH and HYBIOMASS redirect to the same CAS login). **O11's correction is about L2A only** — the 8 products found on disk are L2A products, not SpectralEarth, and no SpectralEarth data was found anywhere in this repository during the same disk search that found the L2A products. So O12's own status is **unchanged and still genuinely open**: it depends on the live download leg, which — per O11's corrected right-hand column — remains untested, not on whatever premise O11's title previously implied. | Decide only after the download leg is actually re-tested (not assumed from O11's data-on-disk finding, which does not apply here) and after §8.0 verifies EnMAP band/wavelength facts. Check `github.com/AABNassim/spectral_earth` for a subset or mirror first — a 3.3 TB pull is out of scope regardless. Do not let a foundation-model detour displace the critical path in §11. |
 | ~~O4~~ | ~~**QGIS install**~~ | **CLOSED 2026-08-22 (D26).** QGIS 4.2.1 installed; `qgis/projects/phase2_verify.qgz` built and checked — affine plumbing confirmed, **Phase 2 exit signed off**. `demo_verify.qgz` additionally confirmed real georeferencing on HAD100 against OpenStreetMap (Dogpound Creek, Alberta). Feature-level Level 2 accuracy remains open — no independently-known target exists in that scene. | — |
 | O5 | **Level-3 case-study site** | Depends on the `landcover` profile and Sentinel-2 coverage of a known dated event. | Pick during Phase 5 from actual data availability; record the selection rationale in `docs/validation.md`. |
-| O6 | **Fusion weight tuning split** | Which ABU scenes are the tuning split vs. the reporting set. Must be fixed **before** any number is reported, or the fused AUC is optimistically biased. | Fix a seeded 4/9 split at the start of 3A.9, commit the split file, never revisit it. |
+| ~~O6~~ | ~~**Fusion weight tuning split**~~ | **RESOLVED 2026-08-22.** `scripts/tune_fusion_weights.py` fixed a deterministic split before any number was reported: 5 TUNE scenes, 8 REPORT scenes, recorded in `experiments/rx_vs_ae/fusion_weights.json`. D25 reports only from the held-out 8. This row's original text guessed a seeded **4/9** split; the committed split is **5/8** — a deviation from the guess, recorded here rather than silently corrected. | — |
 | ~~O8~~ | **ABU/HYDICE/Indian Pines carry no wavelength arrays (D13.4)** | **CLOSED — decided, not open.** Option 2 is adopted: learned models score on HAD100 only; classical detectors keep ABU + HYDICE + HAD100. Written into §3B.8, §13 rule 6, and the C1 contract. **No longer blocks 3B.** The cost — LODO cut from five arms to three, single-sensor generalization — is stated in §3B.8 rather than absorbed silently. |
 | O9 | **Recover true per-scene wavelengths for ABU/HYDICE** | Their parent AVIRIS flight lines may be identifiable, and NASA's public per-flight calibration archive publishes wavelength/FWHM tables per flight. If a scene can be matched to its flightline, its real wavelength array is recoverable — which would restore ABU/HYDICE for learned models and un-suspend the two LODO arms. ABU's seven distinct band counts make the matching non-trivial: the retained-band subset differs per scene and is undocumented. | **Does not block anything currently scheduled.** Not on the critical path, not a Phase 3B gate, not a Phase 5 gate. Pursue opportunistically; if it fails or is never attempted, O8's decision stands unchanged and the plan is complete without it. |
 | O7 | **PRISMA access** | Not held (§0.2 — listed separately from EnMAP/AVIRIS, which *are* held). Needs an ASI proposal, which has a lead time; AVIRIS and EnMAP are open and already cover Level 2. | Level 2 proceeds on EnMAP + AVIRIS. PRISMA is a bonus, not a dependency. |
