@@ -22,8 +22,75 @@ power: no wattmeter exists, and an estimated wattage presented as measured is a 
 | `torch` | 2.13.0+cu130 | export source; inference must not need CUDA (§0.3) |
 | cgroup | **v2** (`cgroup2fs`) | `run_constrained` can use cgroups |
 | root controllers | `cpuset cpu io memory hugetlb pids rdma misc dmem` | |
-| **user-slice delegated controllers** | **`cpu memory pids` only — no `cpuset`** | **`cpuset` is NOT available unprivileged.** Pin cores with `taskset -c 0-3`, and use cgroup v2 only for `memory.max` and `cpu.max`. A `cpuset.cpus` write will fail with EACCES or silently no-op depending on path. Detect and degrade explicitly; never silently skip a constraint. |
+| **user-slice delegated controllers** | **`cpu memory pids` only — no `cpuset`** | Pin cores with `taskset`, cap memory/CPU with `systemd-run --user`. **See the cgroup section below — it is all verified, do not rediscover it.** |
 | host | 8 logical cores, ~13 GB RAM, no swap | a 6 GB RSS ceiling has real headroom; the machine will OOM-kill rather than swap (this already happened once — `plan.md` D17) |
+
+## cgroup v2 on this machine — everything `run_constrained` needs, verified 2026-08-22
+
+Do not spend time discovering this. Every line below was run on this host and its output recorded.
+
+### What works, and what does not
+
+| mechanism | verdict | evidence |
+|---|---|---|
+| `systemd-run --user --scope -p MemoryMax=… -p CPUQuota=…` | **works, unprivileged — use this** | process read back `memory.max = 536870912`, `cpu.max = 50000 100000` |
+| `taskset -c 0-3 <cmd>` | **works** | `taskset -c 0-3 nproc` → `4` |
+| manual `mkdir` under `user@1000.service/` | works; delegated controllers `cpu memory pids` | `mkdir` OK, `cgroup.controllers` → `cpu memory pids` |
+| **`cpuset` (core pinning via cgroup)** | **NOT AVAILABLE** | a user cgroup contains only `cpu.max`, `cpu.max.burst`, `memory.max` — there is **no `cpuset.cpus` file at all**, and writing it fails |
+| catching the memory cap as `MemoryError` | **DOES NOT HAPPEN** | see below |
+
+### The recommended call
+
+```bash
+systemd-run --user --scope -q     -p MemoryMax=8192M -p CPUQuota=100% --slice=sih3d.slice     taskset -c 0-3 <cmd>
+```
+
+`taskset` supplies the core pinning that `cpuset` cannot, and `systemd-run --user` supplies the
+memory and CPU caps. Neither needs root. Note `CPUQuota=100%` means *one core's worth of time*,
+not "unthrottled" — for 4 cores at full speed pass `CPUQuota=400%`, and make
+`cpu_quota_pct` in the signature mean the systemd sense so the two do not silently disagree.
+
+To read back what a child actually got (worth asserting in a test, rather than trusting the flags):
+
+```python
+cg = open("/proc/self/cgroup").read().split("::")[1].strip()
+base = f"/sys/fs/cgroup{cg}"
+mem  = open(f"{base}/memory.max").read().strip()   # bytes, or "max"
+cpu  = open(f"{base}/cpu.max").read().strip()      # "<quota> <period>", or "max 100000"
+```
+
+### The trap that will actually cost you a day
+
+**A cgroup memory cap does not raise `MemoryError`. It SIGKILLs the process, silently.**
+
+Measured: a Python child under `MemoryMax=256M` allocating past the cap produced **exit code 137**
+(128 + 9 = SIGKILL), **no traceback, no stdout, no stderr**. The `except MemoryError` branch never
+ran.
+
+Three consequences, all binding on 3D.1 and 3D.5:
+
+1. `StripPipeline`'s `MemoryBudgetExceeded` **cannot** be implemented by catching an allocation
+   failure. Sample RSS with `psutil` between stages and raise **before** the cap is reached. Set
+   the cgroup cap *above* the pipeline's own ceiling so the pipeline's error fires first and the
+   kernel's kill is the backstop, not the mechanism.
+2. `run_constrained` must treat **exit 137 as a distinct, reported outcome** — "OOM-killed at
+   `mem_mb`" — not as a generic non-zero exit. Returning `status="FAILED"` for it would lose
+   exactly the fact the run existed to establish.
+3. A silent kill mid-benchmark leaves a **truncated** JSONL file that parses fine. `ProfileSink`
+   should write a terminal record on clean completion so a truncated run is detectable, rather
+   than reading as a short-but-valid one.
+
+This machine has **no swap**, so there is no gradual degradation before the kill — and the project
+has already been OOM-killed once building the background pool (`plan.md` D17).
+
+### Degrade explicitly, never silently
+
+If a constraint cannot be applied — `cpuset` absent, `systemd-run` missing, cgroup v2 not mounted —
+the run must **record which constraints were actually applied** in its output and, for a benchmark
+run, fail rather than proceed. An unconstrained run that reports itself as constrained produces
+plausible numbers that are simply wrong, which is this project's single most repeated failure mode
+(D22.2, D24, D26, D28). Put the applied-constraints dict in every `experiments/edge_benchmarks/*.jsonl`
+record next to `"measurement": "SIMULATED"`.
 
 ## Build order
 
