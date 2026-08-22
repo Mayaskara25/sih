@@ -35,16 +35,59 @@ def compute_confidence(roi: ROIRecord) -> tuple[float, list[str]]:
     return confidence, sorted(available, key=order.index)
 
 
+_TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def _resolve_timestamp(timestamp: str | None, meta: SceneMeta) -> str:
+    """C6 `timestamp` means WHEN THE SCENE WAS OBSERVED, not when we processed it.
+
+    D33: this defaulted to `datetime.now()` unconditionally, so every GeoJSON
+    this project has emitted carried the RUN date. Nobody noticed while every
+    source had `acquired=None` -- the wrong value and the only available value
+    were the same string. EnMAP is the first source that parses a real
+    `<startTime>`, which is what made the gap visible.
+
+    Order: an explicit caller argument wins; otherwise `meta.acquired`; only
+    when the scene genuinely has no acquisition time does this fall back to
+    now(), because a C6 record must carry *some* ISO-8601 string.
+
+    A malformed `meta.acquired` RAISES rather than silently reaching the
+    output. A timestamp that parses but means the wrong thing is exactly the
+    failure this note exists to close, so an unparseable one must not be
+    quietly replaced by the run date -- that would restore the old bug for
+    the one source most likely to hit it.
+    """
+    if timestamp is not None:
+        return timestamp
+    if meta.acquired is None:
+        return datetime.now(timezone.utc).strftime(_TS_FORMAT)
+    raw = meta.acquired.strip()
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(
+            f"SceneMeta.acquired is not ISO-8601 and cannot be used as the C6 "
+            f"timestamp: {raw!r}. Fix the loader that produced it, or pass an "
+            f"explicit timestamp= to rois_to_geojson()."
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime(_TS_FORMAT)
+
+
 def rois_to_geojson(rois: list[ROIRecord], meta: SceneMeta, out_path: str | Path,
                      *, timestamp: str | None = None) -> Path:
     """The ONLY place EPSG:4326 reprojection happens (C7). Emits every C6
     field including the D5 amendment fields. Computes `confidence` via D4
     over whatever components are non-None, and records which ones in
     `confidence_components`.
+
+    `timestamp` defaults to the scene's ACQUISITION time (`meta.acquired`),
+    falling back to the run time only when the source has none -- see
+    `_resolve_timestamp` and D33.
     """
     out_path = Path(out_path)
-    if timestamp is None:
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = _resolve_timestamp(timestamp, meta)
     polygons = rois_to_polygons(rois, meta)
     wgs84_polygons = to_wgs84(polygons, meta.crs)
 
