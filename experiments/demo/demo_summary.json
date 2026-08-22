@@ -1,0 +1,63 @@
+{
+  "steps": {
+    "1_load": {
+      "scene": "ang20170821t183707_100.hdr",
+      "shape": [
+        64,
+        64,
+        425
+      ],
+      "has_wavelengths": true
+    },
+    "2_preprocess": {
+      "native_bands": 425,
+      "harmonized_bands": 184,
+      "cloud_mask": "not built (\u00a73C.7, P2)"
+    },
+    "3_detect": {
+      "components": [
+        "ace",
+        "rx",
+        "spatial"
+      ],
+      "seconds": 2.477466659001948
+    },
+    "4_rois": {
+      "n_rois": 3,
+      "stage1_recall": 1.0,
+      "induced_fp_rate": 0.05243812790982602
+    },
+    "5_segment": {
+      "scene_px": 4096,
+      "roi_px": 27,
+      "pixel_saving_frac": 0.993408203125,
+      "note": "unet_pretext on 3 ROI crops of the HARMONIZED 184-band cube (fitted PCA reused, D15)"
+    },
+    "6_postfilter": {
+      "kept": 3,
+      "dropped": 0
+    },
+    "7_geojson": {
+      "path": "experiments/demo/ang20170821t183707_100_demo.geojson",
+      "n_features": 3
+    },
+    "8_offline": {
+      "asserted": true
+    },
+    "9_metrics": {
+      "wall_clock_s": 13.007788215996698,
+      "detector_s": 2.477466659001948,
+      "peak_alloc_mb": 96.391129,
+      "pixel_saving_frac": 0.993408203125,
+      "measurement": "MEASURED on laptop; edge figures SIMULATED"
+    },
+    "10_temporal": {
+      "status": "SKIPPED",
+      "reason": "3C not built (P2)"
+    },
+    "11_quantum": {
+      "status": "SKIPPED",
+      "reason": "3E not built (P2)"
+    }
+  }
+}

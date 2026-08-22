@@ -99,21 +99,6 @@ def no_network(enabled: bool):
         socket.socket = real                                  # type: ignore[assignment]
 
 
-def meta_for_harmonize(scene_hdr: Path, wl, cube):
-    """Minimal SceneMeta for harmonize(). It needs the wavelength array and
-    little else; the geometry comes from the ENVI header separately."""
-    import numpy as _np
-    import rasterio.crs, rasterio.transform
-    from core.contracts import SceneMeta
-    return SceneMeta(scene_id=scene_hdr.stem,
-                     crs=rasterio.crs.CRS.from_epsg(4326),
-                     transform=rasterio.transform.from_origin(0, 0, 1, 1),
-                     wavelengths=(_np.asarray(wl, dtype=_np.float64)
-                                  if wl is not None else None),
-                     bad_bands=_np.zeros(cube.shape[-1], bool),
-                     gsd_m=1.0, source="had100", georef="real")
-
-
 def _step(n: int, title: str) -> None:
     print(f"\n[{n:2d}] {title}", flush=True)
 
@@ -148,18 +133,29 @@ def run_demo(*, scene_hdr: Path | None = None, out_dir: Path, assert_offline: bo
         scene_hdr, gt_path = pick_scene()
     else:
         gt_path = None
-    img = spectral.open_image(str(scene_hdr))
-    cube = np.asarray(img.load(), dtype=np.float32)
-    wl = getattr(img, "bands", None)
-    wl = np.asarray(wl.centers, dtype=np.float64) if wl and wl.centers else None
+    # load_scene, NOT spectral.open_image directly: it delegates the ENVI
+    # `map info` parse to GDAL (D14.2, after a hand-rolled parser was found
+    # silently dropping real rotation present on every HAD100 header), and it
+    # returns a SceneMeta whose transform and crs are the REAL ones. An
+    # earlier version of this demo built its own SceneMeta with
+    # from_origin(0,0,1,1) while setting georef="real" -- a fabricated affine
+    # wearing a "real" label, which is precisely the mislabel D2 exists to
+    # prevent and would have made any QGIS check meaningless.
+    from preprocessing.raster_loader import load_scene
+    cube, meta = load_scene(scene_hdr, source="had100")
+    wl = meta.wavelengths
+    if wl is not None:
+        wl = np.asarray(wl, dtype=np.float64)
+        if wl.max() < 100:                       # some ENVI headers use micrometres
+            wl = wl * 1000.0
     gt = None
     if gt_path and gt_path.exists():
         gm = sio.loadmat(gt_path)
         gt = gm[next(k for k in gm if not k.startswith("__"))].astype(bool)
     print(f"     {scene_hdr.name}  {cube.shape}  wavelengths={'yes' if wl is not None else 'no'}"
           f"  gt={'yes' if gt is not None else 'no'}")
-    print(f"     source: HAD100 (AVIRIS) -- real wavelengths (D13.4) and real "
-          f"UTM/WGS-84 georeferencing (D11.5)")
+    print(f"     CRS {meta.crs.to_string() if meta.crs else 'NONE'}   georef={meta.georef}")
+    print(f"     transform read from the ENVI header via GDAL (D14.2), not fabricated")
     summary["steps"]["1_load"] = dict(scene=scene_hdr.name, shape=list(cube.shape),
                                       has_wavelengths=wl is not None)
 
@@ -183,7 +179,7 @@ def run_demo(*, scene_hdr: Path | None = None, out_dir: Path, assert_offline: bo
         harm = None
         try:
             from preprocessing.harmonize import harmonize
-            harm, harm_meta = harmonize(cube, meta_for_harmonize(scene_hdr, wl, cube))
+            harm, harm_meta = harmonize(cube, meta)
             print(f"     harmonized {cube.shape[-1]} -> {harm.shape[-1]} canonical bands "
                   f"(400-2500 nm @10 nm, water windows dropped -- D9)")
         except Exception as exc:                                  # noqa: BLE001
@@ -235,14 +231,6 @@ def run_demo(*, scene_hdr: Path | None = None, out_dir: Path, assert_offline: bo
             print(f"     no ground truth for this scene -> percentile threshold; "
                   f"stage-1 recall NOT claimed")
         mask = morphological_cleanup(mask)
-        from core.contracts import SceneMeta
-        import rasterio.crs, rasterio.transform
-        meta = SceneMeta(scene_id=scene_hdr.stem,
-                         crs=rasterio.crs.CRS.from_epsg(4326),
-                         transform=rasterio.transform.from_origin(0, 0, 1, 1),
-                         wavelengths=wl, bad_bands=np.zeros(cube.shape[-1], bool),
-                         gsd_m=float(getattr(img, "gsd", 1.0) or 1.0),
-                         source="had100", georef="real")
         rois = mask_to_rois(mask, meta, source_branch="anomaly", target_profile=profile_name)
         for roi in rois:
             r0, c0, r1, c1 = roi.bbox
