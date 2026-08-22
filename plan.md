@@ -1466,6 +1466,164 @@ passes for the wrong reason is worse than one that fails.**
 
 ---
 
+### D27 — Branch 3E built (2026-08-22). Seven of its nine design points are corrections to §6.5, and each is the same error §3E.2 already names: **comparing on unequal ground measures the ground, not the model.**
+
+3E is the last unbuilt arm. Before writing anything, the pinned stack and the compute budget
+were spiked, per the project's standard that documentation is wrong until opened. Six measured
+facts came back, and they changed the design rather than confirming it.
+
+**D27.0 — what the spike measured.**
+
+1. The pinned trio composes: `qiskit 2.5.2` · `qiskit-aer 0.17.2` · `qiskit-machine-learning
+   0.9.1`. Bell on `AerSimulator` at 4096 shots → `{'00': 2039, '11': 2057}`, inside 3σ
+   (2048 ± 96). §3E.1 accepts.
+2. **V1 primitives are gone.** `from qiskit.primitives import Sampler` raises `ImportError` on
+   qiskit 2.x; only `StatevectorSampler` (V2) and `qiskit_aer.primitives.SamplerV2` exist.
+   `qiskit_algorithms` is not installed at all — `COBYLA` comes from
+   `qiskit_machine_learning.optimizers`. §6.5's "`AerSimulator` with a seeded `Sampler`" names
+   an object that no longer exists.
+3. **`ZZFeatureMap` / `RealAmplitudes` / `NLocal` classes are deprecated** (Qiskit 2.1+). The
+   function forms `zz_feature_map()` / `real_amplitudes()` build the same circuits and emit no
+   warning. §3E.2 and §3E.3 name the classes; the code uses the functions.
+4. **`FidelityQuantumKernel` costs 28 ms/pair** at 8 qubits, `reps=2`, linear entanglement —
+   measured N=50 → 35.3 s (1275 pairs), N=100 → 142.8 s (5050 pairs), clean O(N²). A 400-sample
+   train Gram is ~38 min *before* the test Gram. This, not the VQC, is the branch's binding cost.
+5. **An exact statevector Gram is ~180× faster and agrees to 1.1e-11.** Forming
+   |⟨φ(x)|φ(y)⟩|² as one `Statevector` per sample then a single matrix product: N=40 → 0.122 s
+   against `FidelityQuantumKernel`'s 22.4 s, `max|ΔG| = 1.13e-11`; a full N=600 Gram in 1.82 s.
+   O(N) simulations instead of O(N²), same object.
+6. **VQC costs 10.35 s per COBYLA objective evaluation** at N=600 / 8 qubits / 32 ansatz
+   parameters (3.64 s at N=200), so `maxiter=200` is ~35 min. A trap in the measurement itself:
+   qiskit's `maxiter` maps to scipy's `maxfun`, which is silently clamped to a minimum of
+   `n_params + 2` — a `maxiter=10` smoke run actually performs 34 evaluations. Extrapolate from
+   the clamped count or the estimate is off by 3.4×.
+
+**D27.1 — split on flightline, not on patch.** HAD100's 94 test patches come from **only 10
+AVIRIS-NG flightlines, one of which holds 38 of them (40%)**: `ang20170821t183707` ×38,
+`ang20171012t194435` ×12, `ang20170908t225309` ×10, `ang20170821t195229` ×8,
+`ang20210614t141018` ×7, `ang20191004t185054` ×6, `ang20170825t173426` ×5,
+`ang20180227t082814` ×4, `ang20191004t215336` ×3, `ang20191027t204454` ×1. (There is no
+`aviris_target/` directory — the test set is AVIRIS-NG only.) A patch-level split therefore
+trains and tests on the same flightline. This never mattered before because **every detector
+shipped so far is unsupervised and per-scene**; 3E is the first arm that trains, so it is the
+first arm that can leak. The split is fixed, seeded and committed, and never revisited — the
+discipline O6 imposes on the fusion tuning split. It is a fourth kind of leakage alongside
+§12's three, and `test_data_hygiene.py`'s scene-group machinery does not cover it, because it
+groups the *background pool*, not the test set.
+
+**D27.2 — the classical AE arm is a dense AE on the same 8 features, not §3A.6's conv AE.**
+§3E.4 says the QAE "mirrors 3A.6's autoencoder so the comparison is architecture-to-
+architecture." §3A.6 does not exist (P3, `DEFERRED` in `run_benchmark.py`), and had it existed
+the comparison would still have been wrong: a 15×15×30 spectral-**spatial** conv AE against an
+8-dim vector QAE compares input representations, not architectures. §3A.6 stays unbuilt.
+
+**D27.3 — VQC is supervised and every other arm is not.** §3E.6's five arms are four
+unsupervised (classical AE, `OneClassSVM`-RBF, QAE, quantum kernel) and one supervised (VQC).
+Ranking them in one column measures **supervision**, an effect larger than anything quantum.
+Fixed two ways, both required: a `supervision` column in the table, and a supervised classical
+partner (`SVC(rbf)` on identical features). Six arms, read as two families of three, never as
+one ranking of six.
+
+**D27.4 — wall-clock is simulator time, and at 8 qubits it is not a quantum measurement.**
+D27.0's finding 5 is the proof, not an aside: a "quantum kernel" that a laptop reproduces
+exactly, 180× faster, by multiplying two matrices. The table labels the column
+`wall_clock_s (AerSimulator, CPU)` and the doc states it carries no QPU implication. Circuit
+depth is reported **transpiled** to `basis_gates=["rz","sx","x","cx"]`, `optimization_level=1`,
+both recorded in the results JSON — depth without a named basis is not comparable between arms.
+Measured for reference: feature map depth 33, `{rz:46, cx:28, sx:16}`; ansatz depth 11.
+
+**D27.5 — two files added to §3's layout.** `quantum/data.py` (split + sampling) and
+`quantum/classical_baselines.py` (the three classical arms). Folding either into
+`feature_map.py` would hide the leakage-critical split behind a name that does not say so.
+Logged rather than silently added.
+
+**D27.6 — 3E is HAD100-only, and this is forced rather than chosen.** `classical_reduce` must
+reuse `reduce_bands`, which consumes `harmonize` output, which requires wavelengths. ABU and
+HYDICE ship none (O8/D13.4). §13 rule 6 binds 3E exactly as it binds 3B: no ABU or HYDICE
+quantum number may be produced or implied.
+
+**D27.7 — train balanced, report at natural prevalence — and the honest version is also the
+cheap one.** A 40-background/40-anomaly subsample is the right *training* set and the wrong
+*reporting* set. PR-AUC is prevalence-dependent by construction, so a balanced PR-AUC set beside
+`results_pooled.csv`'s HAD100 row (`kernel_rx` ROC-AUC 0.9713, natural prevalence, every pixel)
+invites a comparison that is arithmetic nonsense — and someone will place them side by side,
+because both are labelled "HAD100".
+
+The obvious fix — score every pixel of all 28 test patches — is **not** cheap for the quantum
+arms. HAD100 test scenes run 64x64 to 100x100 at ~0.4 % anomaly prevalence, so 28 patches is
+~200 000 pixels, and VQC's `SamplerQNN` forward pass costs ~17 ms/sample (D27.0 finding 6):
+about **an hour of scoring per quantum arm**, three times over.
+
+The correct fix is cheaper *and* exact: score **all anomaly pixels plus a bounded random
+background sample**, then pass `sample_weight` to `roc_auc_score` / `average_precision_score`
+with the background weighted back up by `n_background_total / n_background_sampled`. ROC-AUC is
+a ranking statistic and is prevalence-invariant either way; PR-AUC is not, and the weights
+restore it exactly.
+
+Measured on a 200 000-pixel synthetic population at 0.4 % prevalence, using 4 800 scored pixels
+(a 42x saving):
+
+| | ROC-AUC | PR-AUC |
+|---|---|---|
+| full population, 200 000 px | 0.9600 | **0.3395** |
+| weighted subsample, 4 800 px | 0.9608 | **0.3259** |
+| **unweighted** subsample, 4 800 px | 0.9608 | **0.8695** |
+
+The unweighted PR-AUC reads **0.87 where the truth is 0.34** — it more than doubles, and it
+does so in the direction that flatters the result. Nothing about that number looks wrong on
+inspection. Same class as D20 and D22.1: a plausible number measuring something other than what
+the reader assumes.
+
+**D27.8 — §3E.8's novelty claim is false as written, and the search that found it is recorded
+in `docs/experiments.md`.** The proposed claim was *"no existing published work applies VQC/QAE
+feature encoding directly to hyperspectral anomaly detection."* A dated search (2026-08-22, five
+verbatim queries, arXiv/IEEE/ResearchGate/IOPscience via a general index) found **arXiv
+2605.04388**, *Hyperspectral Anomaly Detection Using Einstein Fuzzy Computing and Quantum Neural
+Network* (Lin, Young, Langari; 6 May 2026), which fuses a quantum detector with classical ones
+for exactly this task — and **arXiv 2605.17587**, *Large-Scale Quantum Kernels for Hyperspectral
+Data Classification* (Delilbasic et al., 17 May 2026), which is larger-scale than anything here
+on §3E.5's own method, though on classification rather than anomaly detection. A cybersecurity
+QAE paper (arXiv 2510.21837) independently arrives at the same 8-feature / dense-angle /
+`RealAmplitudes` configuration this branch chose. The claim narrows to one about **protocol** —
+no work found evaluates VQC, SWAP-test QAE and fidelity quantum kernel side by side on
+hyperspectral AD on a shared feature basis with supervision-matched classical baselines under a
+leakage-controlled split. That is a smaller claim than §3E.8 imagined and one this branch's own
+numbers can support. §13 rule 4 already said scoped novelty is not advantage; this is the first
+time the scope was actually measured, and it moved.
+
+**D27.9 — a third of the test features land outside the training range, and it is flightline
+domain shift, not anomalousness.** Measured on the built split (589 train / 574 val / 600 test,
+28 test scenes): with the MinMax fitted on train and clipped, **203 of 600 test rows (33.8 %)
+have at least one feature saturated at 0 or π**, against 14 of 4 712 train values total — the
+handful that define the range. Without the clip those pixels would encode as angles outside
+[0, π], and for angle encoding that *wraps*: an extreme value silently maps onto a
+normal-looking angle. Clipping saturates instead, which loses discrimination among extremes but
+keeps them separable from the background. Clipping is the right choice and it is not free.
+
+The obvious hypothesis — that the out-of-range pixels are the anomalies — is **wrong**, and
+checking it was worth the two minutes. Clipped rows are 39.3 % of background against 28.3 % of
+anomalies: the shift is *away* from anomalousness. The test flightlines are simply different
+flights with a different radiometric range. That is D27.1's honest cost made visible: a
+patch-level split would have shown near-zero clipping, because train and test would have shared
+flightlines and therefore shared ranges. The saturation is not a defect introduced by the split;
+it is the generalization gap the split stopped hiding.
+
+**Consequence for reading the table.** Every 3E arm is being asked to generalize across
+flightlines with a third of its test features at the encoding boundary. This depresses all six
+arms and should depress them comparably, so the *comparison* stays fair — but it makes the
+absolute numbers **not** comparable to `results_pooled.csv`'s classical detectors, which are
+unsupervised, per-scene, and never generalize across anything at all. Two rows both labelled
+"HAD100" measuring two different tasks; see D27.7 for the other half of that trap.
+
+**The pattern, again.** Six of these sub-notes are cases where a specified comparison
+would have produced a number that looked fine and measured the wrong thing — the feature basis
+(§3E.2's own warning), the input representation (D27.2), the supervision regime (D27.3), the
+simulator overhead (D27.4), the class prevalence (D27.7), or the flightline (D27.1). None would
+have failed a test. That is now the branch's own restatement of the lesson D22/D24/D25 taught:
+**a check that passes for the wrong reason is worse than one that fails.**
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
@@ -2548,6 +2706,13 @@ Person E owns `geospatial/` (built in Phase 2) and integrates every branch's out
 
 ### 6.5 — Branch 3E · Quantum (Person F)
 
+> **Read D27 before this section.** 3E was built on 2026-08-22 and seven of the eight
+> design points in D27 are *corrections* to what follows: `Sampler` (V1) no longer exists,
+> `ZZFeatureMap`/`RealAmplitudes` are deprecated classes, §3E.4's "mirrors 3A.6" compares
+> input representations rather than architectures, §3E.6's five arms mix supervision
+> regimes in one ranking, and §3E.8's novelty claim is false as written. The subsections
+> below are kept as the original specification; D27 is what was built.
+
 Never a dependency of the operational pipeline (Roadmap §1.5, §9.10). Never runs on the edge device (Roadmap §6). PC + simulator only.
 
 #### 3E.1 `quantum/qiskit_basics.py`
@@ -2812,7 +2977,7 @@ interesting one.
 |---|---|---|
 | **P0 — ship this** | finish `3B` (`train_unet` → `infer`) · `local_rx` · `kernel_rx` · `crd` · `streaming_rx` · `fusion` · **Phase 4** · **Phase 5 Level 1** · **Phase 7 `demo.py`** | the critical path plus the benchmark that makes it defensible and the demo that makes it presentable. A working, benchmarked, demoable system. |
 | **P1 — if P0 is done** | `3D`: `profiling` · `constrained_sim` · `roi_pipeline` · `benchmark` · **Phase 6 Tier A** | edge story; simulated only, and §9 forbids reporting power |
-| **P2 — genuinely optional** | `3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net` — and `3E`: the whole quantum arm | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
+| **P2 — genuinely optional** | `3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net` — and ~~`3E`: the whole quantum arm~~ (**3E BUILT 2026-08-22, D27**) | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
 | **P3 — deferred, do not start** | `train_alt_arch` · `deep_detector` · `autoencoder` · `quantization` · `onnx_inference` | architecture comparison and deployment polish. Valuable, not load-bearing. |
 | **BLOCKED — never start** | Phase 6 **Tier B** | no instrumented hardware exists (§0.2, §9). Not a scheduling choice. |
 
@@ -2901,7 +3066,7 @@ Train/test leakage would invalidate every number in the report, and it is the ki
 
 | # | Item | Why it is open | Default if unanswered |
 |---|---|---|---|
-| O1 | **IBM Quantum account** | Not held (§0.2). Gates 3E.7. | 3E ships simulator-only; the hardware run is documented as a prerequisite, and no hardware result is reported. |
+| O1 | **IBM Quantum account** | Not held (§0.2). Gates 3E.7. | **Default taken, 2026-08-22 (D27).** 3E is built and ships **simulator-only**. No hardware result appears in `docs/experiments.md`, `plan.md`, or any report. Note D27.4: at 8 qubits the simulator reproduces the "quantum" kernel exactly and 180× faster, so acquiring an account would change the *provenance* of these numbers, not their standing — 3E.7 remains a demonstration, never a source of a comparison-table row. |
 | O2 | **Raspberry Pi 5 procurement** | Not owned. Gates Phase 6 Tier B. | Everything ships as `SIMULATED`. |
 | O3 | **FPGA/NPU comparison device** | Not owned. Gates the accelerator arm. | The arm is dropped from the report and stated as dropped, not silently omitted. |
 | O10 | **Credential expiry** | CDSE S3 key pairs are created with a caller-chosen expiry date (§4.1b). An expired key fails Phase 5 Level 3 at the download leg, and the symptom looks like a service outage rather than an auth problem. | Choose a long expiry at creation; diarise it. `scripts/check_credentials.py` reports configuration but **cannot** detect an expired-but-present key — only a real request can. Re-check before Phase 5. |
