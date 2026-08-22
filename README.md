@@ -58,15 +58,56 @@ docs/                 dataset facts, onboarding, EnMAP handover
 
 ```bash
 .venv/bin/python -m pipeline.run_pipeline \
-  --scene data/benchmark/indian_pines/Indian_pines_corrected.mat
+    --scene data/benchmark/indian_pines/Indian_pines_corrected.mat \
+    --source indian_pines --detector fused --out experiments/demo
 ```
 
-Writes score rasters, a mask, ROIs as GeoJSON, and a run manifest to
-`experiments/phase2/`.
+`--detector` resolves through a registry, so swapping detectors is a config
+edit rather than a code change (§4.1). Available: `global_rx`, `local_rx`,
+`kernel_rx`, `crd`, `fused`. `streaming_rx` is deliberately **not** in that
+registry — it takes a scene path rather than a cube, because its whole purpose
+is never materializing the cube; call it directly.
 
-> Indian Pines has **no CRS and no wavelengths**. Its affine is synthesised and
-> labelled `georef: "synthetic"` (D2). It verifies transform *plumbing*, never
-> real-world accuracy. Real georeferencing is verified on HAD100 (D11.5, D15).
+Per-dataset detector parameters go through `--detector-params` as JSON, never
+hardcoded (§3A.2 — HAD100's 64×64 patches want a smaller annulus than a
+150×150 ABU scene, and carrying one to the other measurably reranks the
+detectors).
+
+## Run the demo
+
+```bash
+.venv/bin/python pipeline/demo.py --assert-offline
+```
+
+Runs the full §10 sequence on a real HAD100/AVIRIS scene and prints all eleven
+steps. Takes about 15 seconds; writes GeoJSON plus `demo_summary.json` to
+`experiments/demo/`. Useful flags: `--scene <path.hdr>` to pick a scene,
+`--profile landcover`, `--target-recall 0.99`, `--out <dir>`.
+
+**`--assert-offline` genuinely enforces.** It replaces `socket.socket` for the
+whole inference stage, so any connection attempt raises `OfflineViolation`
+rather than being counted and reported afterwards. §10 step 8 is explicit that
+claiming offline operation without proving it is the weakest possible version
+of this demo.
+
+**Steps 10 and 11 print SKIPPED with a reason.** Change detection (3C) and the
+quantum branch (3E) are P2 in §11.1 and were never built. The demo says so
+rather than fabricating output.
+
+## Run the benchmark
+
+```bash
+.venv/bin/python scripts/run_benchmark.py --datasets abu,hydice,had100
+```
+
+Writes `experiments/rx_vs_ae/{report.md,results.csv,results_pooled.csv}` and a
+false-negative log to `experiments/cascade_recall_audit/`. Add `--strict` to
+exit non-zero if any detector failed on any scene.
+
+Every pooled figure is emitted twice: **scene-macro (primary)** and
+pixel-micro (labelled). ABU's anomaly density spans a 32× range, so an
+unlabelled "pooled" number is effectively a report on two scenes — §3A.10
+bans one and this harness never produces one.
 
 ## The project's one rule
 

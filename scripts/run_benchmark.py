@@ -47,6 +47,7 @@ from anomaly.local_rx import local_rx                                # noqa: E40
 from anomaly.rx import global_rx                                     # noqa: E402
 from anomaly.scoring import (                                        # noqa: E402
     ace_score,
+    spectral_index_score,
     calibrate_threshold_for_recall,
     estimate_target_signature,
     spatial_context_score,
@@ -93,7 +94,7 @@ def _abu_scenes() -> list[tuple[str, str, np.ndarray, np.ndarray]]:
     out = []
     for p in sorted(ABU.glob("abu-*.mat")):
         m = sio.loadmat(p)
-        out.append((p.stem, "abu", m["data"].astype(np.float32), m["map"].astype(bool)))
+        out.append((p.stem, "abu", m["data"].astype(np.float32), m["map"].astype(bool), None))
     return out
 
 
@@ -102,7 +103,7 @@ def _hydice_scenes():
         return []
     m = sio.loadmat(HYDICE)
     return [("hydice_urban_anomaly", "hydice",
-             m["data"].astype(np.float32), m["map"].astype(bool))]
+             m["data"].astype(np.float32), m["map"].astype(bool), None)]
 
 
 def _had100_scenes(limit: int | None):
@@ -123,10 +124,16 @@ def _had100_scenes(limit: int | None):
             gt_path = gdir / f"{hdr.stem}.mat"
             if not gt_path.exists():
                 continue
-            cube = np.asarray(spectral.open_image(str(hdr)).load(), dtype=np.float32)
+            img = spectral.open_image(str(hdr))
+            cube = np.asarray(img.load(), dtype=np.float32)
+            wl = None
+            if getattr(img, "bands", None) is not None and img.bands.centers:
+                wl = np.asarray(img.bands.centers, dtype=np.float64)
+                if wl.max() < 100:                 # some ENVI headers use micrometres
+                    wl = wl * 1000.0
             gm = sio.loadmat(gt_path)
             key = next(k for k in gm if not k.startswith("__"))
-            out.append((hdr.stem, "had100", cube, gm[key].astype(bool)))
+            out.append((hdr.stem, "had100", cube, gm[key].astype(bool), wl))
             if limit and len(out) >= limit:
                 return out
     return out
@@ -134,12 +141,33 @@ def _had100_scenes(limit: int | None):
 
 # -------------------------------------------------------------- detectors --
 
-def _fused(cube):
+def _fused(cube, meta=None, profile="object"):
+    """Fusion with the `index` component included WHEREVER IT CAN RUN.
+
+    This is the reason HAD100 matters. `spectral_index_score` selects bands by
+    nearest wavelength and raises on a scene with no wavelength array -- ABU,
+    HYDICE and Indian Pines (D13.4). HAD100 is the ONLY benchmark shipping
+    real wavelengths, so it is the only place the 4-component fusion the plan
+    actually specifies can be evaluated at all. D25's "fusion underperforms"
+    is therefore a claim about the 3-component variant on ABU; this is what
+    tests it against the specified detector.
+    """
     base = global_rx(cube)
     sig = estimate_target_signature(cube, base, top_frac=0.001)
     comps = {"rx": local_rx(cube, **_local_rx_params(cube)),
              "ace": ace_score(cube, sig),
              "spatial": spatial_context_score(base, k=7)}
+    if meta is not None and getattr(meta, "wavelengths", None) is not None:
+        try:
+            import yaml
+            names = yaml.safe_load(
+                (ROOT / "configs" / "target_profile.yaml").read_text())[profile]["indices"]
+            comps["index"] = spectral_index_score(cube, meta, names)
+        except Exception as exc:                                   # noqa: BLE001
+            # Never fabricate it. D20: a zero raster is a CONSTANT after
+            # rank-normalization, not an absence, and would drag every fused
+            # score toward the same value.
+            print(f"       index unavailable: {type(exc).__name__}: {str(exc)[:70]}", flush=True)
     r = fuse_scores(comps, FUSION_WEIGHTS)
     return r.score, "+".join(sorted(r.components))
 
@@ -211,7 +239,7 @@ def _metrics(score, gt, row: Row) -> None:
         row.note = f"{int(np.isnan(score).sum())} NaN px excluded"
 
 
-def run_one(name, dataset, cube, gt, det_name, standardize_first) -> Row:
+def run_one(name, dataset, cube, gt, det_name, standardize_first, meta=None) -> Row:
     row = Row(scene=name, dataset=dataset, detector=det_name,
               standardized=standardize_first, n_px=int(gt.size),
               n_anom=int(gt.sum()), anom_frac=float(gt.mean()))
@@ -219,7 +247,8 @@ def run_one(name, dataset, cube, gt, det_name, standardize_first) -> Row:
     tracemalloc.start()
     t0 = time.perf_counter()
     try:
-        score, comps = DETECTORS[det_name](x)
+        fn = DETECTORS[det_name]
+        score, comps = (fn(x, meta) if det_name == "fused" else fn(x))
         row.components = comps
     except Exception as exc:                                    # noqa: BLE001
         row.status = f"FAILED:{type(exc).__name__}"
@@ -319,9 +348,20 @@ def main(argv=None) -> int:
     print(f"{len(scenes)} scenes x {len(dets)} detectors, standardized={std}\n", flush=True)
 
     rows = []
-    for name, ds, cube, gt in scenes:
+    metas = {}
+    for name, ds, cube, gt, wl in scenes:
+        if wl is None:
+            continue
+        import rasterio.crs, rasterio.transform
+        from core.contracts import SceneMeta
+        metas[name] = SceneMeta(
+            scene_id=name, crs=rasterio.crs.CRS.from_epsg(4326),
+            transform=rasterio.transform.from_origin(0, 0, 1, 1),
+            wavelengths=wl, bad_bands=np.zeros(cube.shape[-1], bool),
+            gsd_m=1.0, source=ds, georef="real")
+    for name, ds, cube, gt, _wl in scenes:
         for d in dets:
-            r = run_one(name, ds, cube, gt, d, std)
+            r = run_one(name, ds, cube, gt, d, std, meta=metas.get(name))
             rows.append(r)
             flag = "" if r.status == "ok" else f"  <-- {r.status}"
             auc = f"{r.roc_auc:.4f}" if r.roc_auc is not None else "  --  "
