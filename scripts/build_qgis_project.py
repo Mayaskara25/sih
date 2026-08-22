@@ -46,7 +46,7 @@ from qgis.core import (  # noqa: E402
     QgsApplication, QgsColorRampShader, QgsFillSymbol, QgsPalLayerSettings,
     QgsProject, QgsRasterLayer, QgsRasterShader, QgsReferencedRectangle,
     QgsSingleBandPseudoColorRenderer,
-    QgsTextFormat, QgsVectorLayer, QgsVectorLayerSimpleLabeling,
+    QgsTextBufferSettings, QgsTextFormat, QgsVectorLayer, QgsVectorLayerSimpleLabeling,
 )
 from qgis.PyQt.QtGui import QColor, QFont  # noqa: E402
 
@@ -61,22 +61,40 @@ def _magma_0_1(layer: QgsRasterLayer) -> None:
         [QgsColorRampShader.ColorRampItem(v, QColor(c), f"{v:.2f}") for v, c in stops])
     shader = QgsRasterShader()
     shader.setRasterShaderFunction(ramp)
-    layer.setRenderer(QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, shader))
+    r = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, shader)
+    # Set the classification bounds EXPLICITLY. Without them the layer has no
+    # computed band statistics yet and the legend renders its min/max labels
+    # as "nan / nan" -- the canvas is correct but the legend reads like the
+    # raster is empty, which is alarming and wrong. The C2 contract already
+    # guarantees _anom_norm is in [0, 1], so there is nothing to compute.
+    r.setClassificationMin(0.0)
+    r.setClassificationMax(1.0)
+    layer.setRenderer(r)
 
 
 def _red_outline(layer: QgsVectorLayer, label_field: str = "roi_id") -> None:
     layer.setRenderer(layer.renderer())
+    # Thick outline ON PURPOSE. The Phase 2 ROIs are 5, 11 and 20 PIXELS in a
+    # 145x145 raster (measured), so at full-scene zoom a hairline outline is
+    # invisible and reads as "the vector layer failed to load". Legibility of
+    # the check beats cartographic restraint here.
     layer.renderer().setSymbol(QgsFillSymbol.createSimple(
         {"color": "0,0,0,0", "outline_color": "255,0,0,255",
-         "outline_width": "0.6", "style": "no"}))
+         "outline_width": "1.4", "style": "no"}))
     if label_field in [f.name() for f in layer.fields()]:
         s = QgsPalLayerSettings()
         s.fieldName = label_field
         s.enabled = True
         fmt = QgsTextFormat()
-        fmt.setFont(QFont("Sans", 8))
+        fmt.setFont(QFont("Sans", 9))
         fmt.setColor(QColor("#ffffff"))
+        buf = QgsTextBufferSettings()      # halo: white-on-magma is unreadable
+        buf.setEnabled(True)
+        buf.setSize(1.0)
+        buf.setColor(QColor("#000000"))
+        fmt.setBuffer(buf)
         s.setFormat(fmt)
+        s.placement = QgsPalLayerSettings.Placement.OverPoint
         layer.setLabeling(QgsVectorLayerSimpleLabeling(s))
         layer.setLabelsEnabled(True)
 
@@ -88,10 +106,28 @@ def build(name: str, raster: Path, vector: Path, *, basemap: bool, note: str) ->
     proj = QgsProject.instance()
     proj.clear()
 
+    # SET THE PROJECT CRS EXPLICITLY, before adding layers.
+    #
+    # Without it QgsProject has an EMPTY crs and on-the-fly reprojection
+    # misbehaves: the layers are each individually correct (raster EPSG:32611,
+    # ROIs EPSG:4326, OSM EPSG:3857) and the basemap still lands in the wrong
+    # country. The failure is quiet and extremely convincing -- the raster
+    # renders, the polygons render, and OSM draws a detailed, plausible town
+    # underneath them, so it reads as "the georeferencing is wrong" rather
+    # than "the project has no CRS".
+    #
+    # The arithmetic that gives it away: this scene sits at UTM 11N easting
+    # 673818, northing 5701837, which is Alberta, Canada. Read those same two
+    # numbers as WEB MERCATOR metres and you get lon 6.05, lat 45.5 --
+    # Montmelian, France, which is exactly where the basemap drew. The
+    # basemap was being fetched for the projected coordinates taken at face
+    # value. The raster was right the whole time.
+
     rl = QgsRasterLayer(str(raster), f"{raster.stem} (anomaly score)")
     if not rl.isValid():
         print(f"  SKIP {name}: raster invalid"); return None
     _magma_0_1(rl)
+    proj.setCrs(rl.crs())          # the scene's own CRS is the project's CRS
 
     vl = QgsVectorLayer(str(vector), f"{vector.stem} (ROIs)", "ogr")
     if not vl.isValid():
