@@ -12,7 +12,7 @@
     "2_preprocess": {
       "native_bands": 425,
       "harmonized_bands": 184,
-      "cloud_mask": "not built (\u00a73C.7, P2)"
+      "cloud_mask": "applied (98.9% clear)"
     },
     "3_detect": {
       "components": [
@@ -20,12 +20,12 @@
         "rx",
         "spatial"
       ],
-      "seconds": 2.467954968997219
+      "seconds": 1.8121084269951098
     },
     "4_rois": {
       "n_rois": 3,
       "stage1_recall": 1.0,
-      "induced_fp_rate": 0.021808380298946335
+      "induced_fp_rate": 0.044596912521440824
     },
     "5_segment": {
       "scene_px": 4096,
@@ -38,27 +38,31 @@
       "dropped": 0
     },
     "7_geojson": {
-      "path": "experiments/demo/ang20170821t183707_100_demo.geojson",
+      "path": "/home/mayaskara/projects/sih/experiments/demo/ang20170821t183707_100_demo.geojson",
       "n_features": 3,
-      "score_raster": "experiments/demo/ang20170821t183707_100_anom_norm.tif"
+      "score_raster": "/home/mayaskara/projects/sih/experiments/demo/ang20170821t183707_100_anom_norm.tif"
     },
     "8_offline": {
-      "asserted": true
+      "asserted": false
     },
     "9_metrics": {
-      "wall_clock_s": 12.746650278000743,
-      "detector_s": 2.467954968997219,
-      "peak_alloc_mb": 96.410414,
+      "wall_clock_s": 10.38011818099767,
+      "detector_s": 1.8121084269951098,
+      "peak_alloc_mb": 96.438153,
       "pixel_saving_frac": 0.993408203125,
       "measurement": "MEASURED on laptop; edge figures SIMULATED"
     },
     "10_temporal": {
-      "status": "SKIPPED",
-      "reason": "3C not built (P2)"
+      "status": "RAN [SYNTHETIC-PAIRS]",
+      "registration_rmse_px": 0.0,
+      "fused_mean_changed": 0.9812512993812561,
+      "fused_mean_background": 0.48844999074935913,
+      "sam_mean_changed": 0.9699327945709229,
+      "n_implants": 3
     },
     "11_quantum": {
       "status": "SKIPPED",
-      "reason": "3E not built (P2)"
+      "reason": "results owned by quantum branch"
     }
   }
 }

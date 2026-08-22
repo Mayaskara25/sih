@@ -13,16 +13,18 @@ all three (D13.1).
 
 WHAT THIS DELIBERATELY DOES NOT SHOW
 ====================================
-Steps 10 (temporal SAM + physics fusion) and 11 (classical-vs-quantum) are
-**not built**. Branch 3C and branch 3E are P2 in §11.1 and were never started.
-The demo prints a SKIPPED line naming what is missing and why, rather than
-producing a plausible-looking placeholder. Step 2's cloud mask is §3C.7 and
-is in the same position.
+Step 11 (classical-vs-quantum) is **not wired** here -- branch 3E is built
+(plan.md D27) but its comparison results are owned by the quantum branch;
+the demo prints a SKIPPED line naming what is missing rather than producing
+a plausible-looking placeholder.
 
-This is not modesty, it is the §13 reporting rules: "Simulated != measured",
-and "do not improvise a stronger claim on stage than the numbers support." A
-demo that fabricates two of its eleven steps is one audience question away
-from being worthless.
+Step 10 (temporal t1-vs-t2) RUNS, but only as a **SYNTHETIC-PAIRS**
+construction: there is no real bi-temporal hyperspectral pair in data/
+(single-epoch benchmarks; EnMAP download blocked, O11). The demo derives
+t2 from the loaded real scene by known-shift misregistration + co-register,
+target implantation, and an illumination gain, then runs the §3C signal
+stack on it. Per §13 reporting rules every number it prints is labelled
+SYNTHETIC-PAIRS and must be quoted as such.
 
 --assert-offline (§10 step 8) GENUINELY BLOCKS SOCKETS. "Claiming offline
 operation without proving it is the weakest possible version of this demo."
@@ -185,12 +187,20 @@ def run_demo(*, scene_hdr: Path | None = None, out_dir: Path, assert_offline: bo
         except Exception as exc:                                  # noqa: BLE001
             print(f"     harmonize FAILED: {type(exc).__name__}: {str(exc)[:110]}")
             print(f"     -> learned segmentation will be skipped; classical path unaffected")
-        print(f"     cloud mask: NOT APPLIED -- preprocessing/cloud_mask.py is "
-              f"§3C.7 and is not built (P2)")
+        cloud_note = "unavailable"
+        try:
+            from preprocessing.cloud_mask import cloud_shadow_mask
+            cld = cloud_shadow_mask(cube, meta)
+            clear_fraction = float((cld == 0).mean())
+            print(f"     cloud mask (§3C.7): applied -- {clear_fraction * 100:.1f}% "
+                  f"of pixels classed clear (spectral-threshold path)")
+            cloud_note = f"applied ({clear_fraction * 100:.1f}% clear)"
+        except ValueError as exc:
+            print(f"     cloud mask (§3C.7): not applicable here -- {str(exc)[:90]}")
         summary["steps"]["2_preprocess"] = dict(
             native_bands=int(cube.shape[-1]),
             harmonized_bands=(int(harm.shape[-1]) if harm is not None else None),
-            cloud_mask="not built (§3C.7, P2)")
+            cloud_mask=cloud_note)
 
         # -- 3 -----------------------------------------------------------
         _step(3, "Fused anomaly detection")
@@ -322,16 +332,70 @@ def run_demo(*, scene_hdr: Path | None = None, out_dir: Path, assert_offline: bo
         wall_clock_s=elapsed, detector_s=t_detect, peak_alloc_mb=peak / 1e6,
         pixel_saving_frac=saving, measurement="MEASURED on laptop; edge figures SIMULATED")
 
-    # -- 10 / 11 -------------------------------------------------------
-    _skip(10, "Temporal t1-vs-t2 (SAM + physics fusion)",
-          "branch 3C is not built (P2 in §11.1) and no multitemporal data is loaded. "
-          "§10 step 10 is conditional on temporal data; there is none.")
+    # -- 10 ------------------------------------------------------------
+    _step(10, "Temporal t1-vs-t2 (SAM + physics fusion) [SYNTHETIC-PAIRS]")
+    try:
+        from change_detection.physics_fusion import (
+            difference_structure, fuse_change_signals)
+        from change_detection.spectral_angle import spectral_angle
+        from preprocessing.harmonize import reduce_bands
+        from preprocessing.registration import coregister_subpixel
+        from segmentation.synth import implant_targets
+
+        side = min(96, cube.shape[0], cube.shape[1])
+        r0 = (cube.shape[0] - side) // 2
+        c0 = (cube.shape[1] - side) // 2
+        small = np.ascontiguousarray(cube[r0:r0 + side, c0:c0 + side])
+        if small.shape[-1] > 30:
+            small, _tf10 = reduce_bands(small, n_components=30)
+        t1d = small.astype(np.float32)
+
+        shifted = np.roll(t1d, shift=(2, -1), axis=(0, 1))
+        aligned, reg10 = coregister_subpixel(t1d, shifted, meta, meta)
+
+        rng10 = np.random.default_rng(0)
+        spectra10 = t1d[rng10.integers(0, side, 8), rng10.integers(0, side, 8)]
+        t2d, cmask, _impl = implant_targets(aligned, spectra10,
+                                            n_targets=3, seed=0)
+        changed10 = cmask.astype(bool)
+
+        sam10 = spectral_angle(t1d, t2d)
+        fused10 = fuse_change_signals(
+            sam10, difference_structure(t1d, t2d),
+            np.zeros(t1d.shape[:2], dtype=np.uint8))
+        from anomaly.scoring import rank_normalize as _rn
+        nfused = _rn(fused10)
+        nsam = _rn(sam10)
+        m_chg = float(np.nanmean(nfused[changed10]))
+        m_bg = float(np.nanmean(nfused[~changed10]))
+        print(f"     pair built from THIS scene: known shift co-registered to "
+              f"{reg10['rmse_px']:.2f} px residual;")
+        print(f"     3 targets implanted into t2 only -- NO real second epoch "
+              f"exists (O11).")
+        print(f"     mean fused score  changed px: {m_chg:.4f}   "
+              f"background px: {m_bg:.4f}")
+        print(f"     every figure on this line is SYNTHETIC-PAIRS and must be "
+              f"quoted as such.")
+        summary["steps"]["10_temporal"] = dict(
+            status="RAN [SYNTHETIC-PAIRS]",
+            registration_rmse_px=reg10["rmse_px"],
+            fused_mean_changed=m_chg, fused_mean_background=m_bg,
+            sam_mean_changed=float(np.nanmean(nsam[changed10])),
+            n_implants=3)
+    except Exception as exc:                                      # noqa: BLE001
+        print(f"     FAILED: {type(exc).__name__}: {str(exc)[:110]}")
+        print("     -> reported as failed, not silently skipped.")
+        summary["steps"]["10_temporal"] = dict(status="FAILED",
+                                               error=f"{type(exc).__name__}: "
+                                                     f"{str(exc)[:110]}")
+
+    # -- 11 ------------------------------------------------------------
     _skip(11, "Classical-vs-quantum comparison",
-          "branch 3E is not built (P2 in §11.1). §13 rule 4 permits only a scoped "
-          "novelty claim, never a quantum-advantage one -- and neither can be shown "
-          "without the branch.")
-    summary["steps"]["10_temporal"] = dict(status="SKIPPED", reason="3C not built (P2)")
-    summary["steps"]["11_quantum"] = dict(status="SKIPPED", reason="3E not built (P2)")
+          "branch 3E is built (plan.md D27) but its comparison results are "
+          "owned by the quantum branch; §13 rule 4 permits only a scoped "
+          "novelty claim, never a quantum-advantage one. Not wired here.")
+    summary["steps"]["11_quantum"] = dict(status="SKIPPED",
+                                          reason="results owned by quantum branch")
 
     (out_dir / "demo_summary.json").write_text(json.dumps(summary, indent=2))
     print(f"\nsummary -> {out_dir / 'demo_summary.json'}")

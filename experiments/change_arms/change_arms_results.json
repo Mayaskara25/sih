@@ -1,0 +1,61 @@
+{
+  "SYNTHETIC_PAIRS": true,
+  "scene": "data/benchmark/had100/HAD100/data/aviris_ng_normal/ang20170821t183707_1.hdr",
+  "crop_shape": [
+    81,
+    81,
+    30
+  ],
+  "n_targets": 5,
+  "illumination_gain": 0.12,
+  "registration": {
+    "residual_px": {
+      "row": 0.0,
+      "col": 0.0
+    },
+    "rmse_px": 0.0,
+    "ecc_score": 0.9894778481514831,
+    "converged": true,
+    "pcc_error": 0.9999997615814209,
+    "meta_t1_georef": "real",
+    "meta_t2_georef": "real",
+    "shift_px": {
+      "row": -3.0,
+      "col": 2.0
+    }
+  },
+  "implant_meta": {
+    "n_targets_requested": 5,
+    "n_targets_placed": 5,
+    "seed": 999,
+    "illumination_gain": 0.12
+  },
+  "changed_px": 103,
+  "illum_only_px": 6151,
+  "arms": {
+    "classical_diff": {
+      "auc": 0.6179029847829289,
+      "precision": 0.019163081736409855,
+      "recall": 0.9514563106796117,
+      "f1": 0.03756948437799501,
+      "pseudo_change_rate": 0.779710616159974
+    },
+    "sam_physics_fusion": {
+      "auc": 0.7650554591730886,
+      "precision": 0.02403728231542801,
+      "recall": 0.9514563106796117,
+      "f1": 0.046889952153110044,
+      "pseudo_change_rate": 0.6119330190212974
+    },
+    "siamese_net": {
+      "auc": 0.5550081632775785,
+      "precision": 0.016166281755196306,
+      "recall": 0.9514563106796117,
+      "f1": 0.03179237631792377,
+      "pseudo_change_rate": 0.9242399609819542,
+      "final_train_loss": 0.8843515316645304,
+      "final_val_loss": 0.9623522758483887
+    }
+  },
+  "wall_clock_s": 7.61425732600037
+}

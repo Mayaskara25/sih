@@ -8,8 +8,10 @@ git checkout -b <yourname>/<module>      # e.g. arun/kernel-rx
 git push -u origin <yourname>/<module>
 ```
 
-Open a PR. `main` stays green — 94 tests pass and both verify scripts exit 0 at
-every commit on it. If your branch can't say the same, it isn't ready.
+Open a PR. `main` stays green — the full pytest suite passes (400+ tests;
+check with `.venv/bin/python -m pytest --collect-only -q | tail -1`) and both
+verify scripts exit 0 at every commit on it. If your branch can't say the
+same, it isn't ready.
 
 ---
 
@@ -32,45 +34,30 @@ already exist.
 
 ---
 
-## What's open
+## What's landed, what's open
 
-The dependency DAG is `plan.md` §11. These branches are unblocked **now**
-(`3A.harmonize` landed, so anything waiting on it is free):
+The dependency DAG is `plan.md` §11. Current state of the branches:
 
-| branch | modules | spec | notes |
+| branch | modules | spec | status |
 |---|---|---|---|
-| **3A detectors** | `local_rx`, `kernel_rx`, `crd`, `streaming_rx` | §3A | `global_rx` exists in `anomaly/rx.py` — follow its signature |
-| **3C change detection** | `registration` → `spectral_angle` → `physics_fusion` | §3C | `change_detection/` is empty. `siamese_net` waits on 3B.synth — don't start it |
-| **3D edge** | `profiling`, `constrained_sim` | §3D, §9 | `edge/` is empty. §11 marks these "start immediately". **Power is never reported** — no instrumented hardware |
-| **3E quantum** | `qiskit_basics` → `feature_map` | §3E | `quantum/` is empty |
+| **3A harmonize + detectors** | `harmonize`, `local_rx`, `kernel_rx`, `crd`, `streaming_rx` | §3A | **landed** |
+| **3B segmentation** | synth → datasets → train_unet → infer → postfilter | §3B | **landed** (one trainable arm; 3 suspended on O9/D21 — they raise informative errors by design) |
+| **3C change detection** | registration → spectral_angle → temporal_difference → physics_fusion → cloud_mask → temporal_baseline → siamese_net | §3C | **landed** (`experiments/change_arms/report.md`; siamese underfits at its modest budget — scaling it is open) |
+| **3D edge** | profiling · constrained_sim · streaming · quantization · onnx_inference · roi_pipeline · benchmark | §3D, §9 | **landed** (SIMULATED numbers only — §0.2: no hardware) |
+| **3E quantum** | qiskit_basics → feature_map → comparison | §3E | **built** (plan.md D27; results owned by the quantum branch) |
 
-### Interfaces you must match
+Genuinely open right now:
 
-**Detectors** (`local_rx`, `kernel_rx`, `crd`, `streaming_rx`). Four people are
-writing these in parallel, so the signature is not negotiable. Follow
-`anomaly/rx.py::global_rx`:
-
-```python
-def <name>(cube: np.ndarray, *, <your params with defaults>) -> np.ndarray:
-    """cube: [H, W, B] float32, NaN = nodata.
-    returns:  [H, W] float32, NaN wherever the input pixel was NaN.
-    """
-```
-
-Rules that apply to all four:
-- **NaN in → NaN out, positionally.** Downstream scoring and masking rely on it.
-- **Never form an explicit inverse.** `global_rx` uses `cho_factor`/`cho_solve`;
-  covariance matrices here are ill-conditioned and `np.linalg.inv` will bite you.
-- **Keyword-only tuning params, all with defaults**, so the eventual Phase 4
-  registry can call any detector uniformly.
-- `streaming_rx` additionally must hold float64 accumulators (Welford/Chan) — see
-  §3A. Single-pass float32 covariance loses precision on 2 088 patches.
-
-Higher raw scores mean more anomalous. Normalization is **not** your job — §3A's
-scoring layer owns it (D3).
-
-**Claimed / do not take:** `3B` (synth → datasets → train_unet) is the critical path
-and actively being worked. So is anything under `preprocessing/`.
+- **Phase 5 §8.0**: `verify_phase5_datasets.py` does not exist — EnMAP L2A /
+  Sentinel-2 / AVIRIS / splib07 are still documentation-only in
+  `docs/datasets.md`. The plan's rule is "assume documentation is wrong."
+- **Fetchers**: `fetch_enmap.py` and `fetch_sentinel2.py` (§8.0a obligations).
+  EnMAP download is externally blocked (O11); Sentinel-2 needs a site choice (O5).
+- **`scripts/fetch_speclib.py::ingest()`** is a deliberate stub (D21): a human
+  must browser-download the archive first; the parser gets written against the
+  real files. This is the cheapest unblock in the project.
+- **Siamese budget scaling** (§3C.8 finding): the learned change arm underfits
+  at 15 epochs / 48 crops — see `experiments/change_arms/report.md`.
 
 Claim a branch by opening an issue titled after the module before you start.
 

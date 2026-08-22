@@ -1,7 +1,7 @@
 # Branch 3E — Quantum research arm
 
-Status: **in progress** (2026-08-22). The literature search below is complete; the
-comparison table is added when `quantum/classical_vs_quantum.py` has run.
+Status: **complete** (2026-08-22). The literature search, method and disclaimers
+(§1–§3) are binding; §4 holds the run's results.
 
 This branch's deliverable is **a comparison table, not an advantage claim** (plan.md §13
 rule 4). The word "advantage" appears in this document only to disclaim it.
@@ -133,4 +133,117 @@ and coupling map is not comparable between arms.
 
 ## 4. Results
 
-*Pending — added when `quantum/classical_vs_quantum.py` completes its run.*
+Run completed 2026-08-22, `git_sha 4f47a40`, full manifest in
+`experiments/quantum_results/run_manifest.json` (package versions: qiskit 2.5.2,
+qiskit-aer 0.17.2, qiskit-machine-learning 0.9.1; seed 0; 8 features). All 8 rows scored all
+28 test scenes with zero failures (224/224 scene rows `status=ok`). Total wall-clock was
+53 min, under the ~2 h budgeted: VQC fit took 1671 s (~28 min) and QAE 796 s (~13 min),
+against the 35/15 min estimates in D27.0 finding 6.
+
+### 4.1 Primary table — scene-macro pooled, natural prevalence
+
+ROC-AUC and PR-AUC are macro means over the 28 test scenes, computed per scene by
+`score_scene_natural` with D27.7's background re-weighting (`sample_weight`) applied — never
+on the balanced split. **Wall-clock is `AerSimulator` CPU time and carries no QPU
+implication (D27.4 / §3).** Depth is transpiled to `basis_gates=["rz","sx","x","cx"]`,
+`optimization_level=1`.
+
+| row_id | supervision | swept | roc_auc_MACRO | pr_auc_MACRO | n_qubits | depth (transpiled) | fit_wall_clock_s (AerSimulator/CPU) |
+|---|---|---|---|---|---|---|---|
+| classical_ae | unsupervised | yes | 0.5819 | 0.2054 | — | — | 0.72 |
+| classical_ocsvm | unsupervised | yes | 0.6293 | 0.1416 | — | — | 0.01 |
+| classical_svc | supervised | yes | **0.8130** | 0.4078 | — | — | 0.01 |
+| rx_8feat | unsupervised | yes | 0.7316 | **0.5132** | — | — | <0.01 |
+| vqc | supervised | no | 0.4736 | 0.0723 | 8 | 41 | 1671.0 |
+| qae | unsupervised | no | 0.4186 | 0.0184 | 13 | 79 | 796.1 |
+| quantum_kernel_spec | unsupervised | no | 0.4017 | 0.0206 | 8 | 33 | 1.09 |
+| quantum_kernel_valscale | unsupervised | yes | 0.6815 | 0.1455 | 8 | 33 | 1.29 |
+
+Read as two families of three (§2), never one ranking of eight. The headline result is a
+negative one, stated plainly: **every quantum arm loses to `rx_8feat`, an unsupervised
+classical baseline on the same 8 features** (0.4736 / 0.4186 / 0.4017 / 0.6815 vs 0.7316
+scene-macro ROC-AUC). This is a legitimate §3E.6 outcome, not a defect to fix. The only arm
+that beats `rx_8feat` anywhere is the supervised `classical_svc` (0.8130), which is the
+supervision effect §2 predicted, not a quantum effect.
+
+### 4.2 Pixel-micro pooled figures — SECONDARY, not comparable to any primary number
+
+Micro-pooled over all scored pixels of all 28 scenes. Labelled explicitly because an
+unlabelled pooled figure is banned in this repo (D27.7): these weight large scenes more than
+small ones and are shown only for completeness beside the macro table above.
+
+| row_id | roc_auc_micro | pr_auc_micro |
+|---|---|---|
+| classical_ae | 0.6580 | 0.3453 |
+| classical_ocsvm | 0.6802 | 0.2284 |
+| classical_svc | 0.7858 | 0.3880 |
+| rx_8feat | 0.7798 | 0.5914 |
+| vqc | 0.4633 | 0.0795 |
+| qae | 0.4518 | 0.0352 |
+| quantum_kernel_spec | 0.3763 | 0.0280 |
+| quantum_kernel_valscale | 0.6483 | 0.1290 |
+
+The ranking agrees with the macro table on every conclusion drawn here; nothing in this
+document rests on a micro figure alone.
+
+### 4.3 Kernel concentration diagnostic — the run reproduced D28
+
+Mean off-diagonal of the fitted background Gram (300 train-background rows, exact statevector
+path), from the run manifest beside D28's measured values:
+
+| configuration | mean off-diag (this run) | mean off-diag (D28) |
+|---|---|---|
+| zz reps=1, scale 1.0 (diagnostic-only, never scored) | 0.0484 | 0.0484 |
+| zz reps=2, scale 1.0 (`quantum_kernel_spec`) | 0.0384 | 0.0384 |
+| zz reps=2, scale 0.5 (`quantum_kernel_valscale`) | 0.0706 | 0.0706 |
+
+Reproduced to the reported precision. The pattern D28 documented also reproduces behaviourally:
+the spec-scale kernel scores below chance on held-out flightlines (test ROC-AUC 0.4017 against
+val 0.6872), while rescaling the angles to `[0, π/2]` lifts test ROC-AUC to 0.6815 with the same
+circuit, the same feature map and the same 300 training rows. One constant moves the kernel arm
+from inverted to competitive-with-nothing-better-than-RX — still below `rx_8feat`.
+
+### 4.4 `quantum_kernel_valscale` differs from `quantum_kernel_spec` — both are reported
+
+Validation selected angle_scale 0.5 (val AUC 0.7044) over the specified 1.0 (val 0.6872), so
+the two rows are **not identical** and both appear in the table. Had val selected 1.0 the two
+rows would have been byte-identical, and that would be stated rather than presenting one result
+twice. The full sweep `{1.0 → 0.5 → 0.25 → 0.125}` shows val AUC falling monotonically past
+0.5 while the Gram's mean off-diagonal rises monotonically — the concentration/scale trade-off
+D28 measured, recomputed inside the runner rather than copied from the note.
+
+### 4.5 Who was tuned, and who was not
+
+`swept=True` on five rows: the four cheap arms (classical AE latent size, OCSVM γ/ν grid,
+SVC C/γ grid, RX regularizer) and the quantum kernel's angle scale. **`vqc` and `qae` are
+`swept=False`: a single COBYLA fit costs ~28 min (VQC) and ~13 min (QAE) at the frozen
+defaults, so their hyperparameters (`ansatz_reps=3`, `maxiter` 200/150) ran once, unswept.**
+A swept arm beside an unswept one is not a like-for-like comparison — the quantum kernel rows
+are directly comparable to each other and to the sweep-matched classical arms; the VQC/QAE
+rows measure single-point performance at their frozen configurations, and their low scores must
+be read with that asymmetry in mind.
+
+### 4.6 F1 is present and uninformative
+
+Every arm lands at F1_MACRO ≈ 0.019–0.044 with precision ≈ 0.010 (≈ natural prevalence) and
+recall ≈ 1.0. The thresholds were calibrated per-arm on val for 0.98 target recall on a far
+more balanced split; scored at ~0.4 % natural prevalence they admit essentially every pixel.
+This is recall-first calibration under prevalence mismatch, not a bug, and it hits all eight
+arms identically — F1 discriminates nothing here. ROC-AUC (prevalence-invariant) and PR-AUC
+(weight-corrected per D27.7) carry the entire comparison.
+
+### 4.7 Shot noise is negligible — closed
+
+Measured previously at the real test-split size: scoring with 1024 shots costs 0.0001 ROC-AUC
+against exact statevector probabilities despite 173/600 duplicate score values; even 256 shots
+costs 0.0024. All quantum arms in this run use exact probabilities; nobody needs to reopen the
+shots question for this branch.
+
+### 4.8 What these results are not comparable to
+
+Not compared to `experiments/rx_vs_ae/results_pooled.csv`'s HAD100 row (D27.9): those
+detectors are unsupervised and per-scene and never generalize across flightlines, whereas every
+arm here trains and is tested on held-out flights — two tasks sharing a label. Not extended to
+ABU or HYDICE (§13 rule 6 / D27.6). No hardware number appears anywhere (§3, O1). Nothing here
+is a quantum-advantage claim (§13 rule 4); the table is the deliverable, and the table says the
+quantum arms lose to a classical RX on the same features under the same split.

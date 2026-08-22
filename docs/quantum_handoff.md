@@ -1,5 +1,10 @@
 # Branch 3E — Quantum: handoff brief to finish the last ~15%
 
+> **COMPLETED 2026-08-22.** The run finished (53 min, 8/8 rows, zero failures) and §4 is
+> written. Results: `experiments/quantum_results/`, write-up: `docs/experiments.md` §4,
+> dated decision: `plan.md` D29. Headline, per the brief's own rule: every quantum arm lost
+> to `rx_8feat`, and it is reported plainly. This brief is retained for provenance only.
+
 **All code is written, tested and committed.** What remains is one long run and one document.
 No new modules are needed. If you find yourself writing a new module, stop — something has
 been misread.

@@ -44,12 +44,14 @@ access. **You do not need any of it to contribute** to the branches listed in
 
 ```
 core/contracts.py     the shared boundary — SceneMeta, validate_scene, ROIRecord
-preprocessing/        raster_loader · normalize · harmonize · background_pool
-anomaly/              rx · scoring
-segmentation/         postfilter
-geospatial/           polygonize · projections · geojson
-pipeline/             run_pipeline
-change_detection/ edge/ quantum/    empty — open for contribution
+preprocessing/        raster_loader · normalize · harmonize · background_pool · registration · cloud_mask
+anomaly/              rx family · crd · scoring · fusion
+segmentation/         synth · datasets · train_unet · infer · postfilter
+change_detection/     spectral_angle · temporal_difference · physics_fusion · siamese_net · temporal_baseline
+geospatial/           polygonize · projections · geojson · roi_fusion
+pipeline/             run_pipeline · demo
+edge/                 edge-deployment branch (3D)
+quantum/              quantum research arm (3E) — see docs/experiments.md
 scripts/              verify_* and fetch_* — run these, do not skip them
 docs/                 dataset facts, onboarding, EnMAP handover
 ```
@@ -90,9 +92,19 @@ rather than being counted and reported afterwards. §10 step 8 is explicit that
 claiming offline operation without proving it is the weakest possible version
 of this demo.
 
-**Steps 10 and 11 print SKIPPED with a reason.** Change detection (3C) and the
-quantum branch (3E) are P2 in §11.1 and were never built. The demo says so
-rather than fabricating output.
+**Step 10 runs on a SYNTHETIC-PAIRS construction.** There is no real
+bi-temporal hyperspectral pair in `data/` (single-epoch benchmarks; EnMAP
+blocked, O11), so the demo derives t2 from the loaded real scene — known
+misregistration co-registered by §3C.1, targets implanted into t2 only,
+illumination gain — and runs the §3C signal stack on it. Every figure it
+prints is labelled SYNTHETIC-PAIRS and must be quoted as such. The full
+three-arm comparison lives in `experiments/change_arms/report.md`.
+
+**Step 11 prints SKIPPED with a reason.** The quantum branch (3E) is built
+and run as a standalone research arm (`quantum/`, results in
+`docs/experiments.md`) but is deliberately not a dependency of the
+operational pipeline, so the demo still says so rather than fabricating
+output.
 
 ## Run the benchmark
 
