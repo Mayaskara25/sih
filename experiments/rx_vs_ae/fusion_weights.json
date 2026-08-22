@@ -1,0 +1,234 @@
+{
+  "note": "Weights selected on TUNE scenes ONLY. REPORT scenes were never used for selection and are the only ones any published fused number may come from (PLAN.md 3A.9, D22.1).",
+  "components": [
+    "rx",
+    "ace",
+    "spatial"
+  ],
+  "index_component_absent_reason": "ABU ships no wavelength array (D13.4/D20)",
+  "tune_scenes": [
+    "abu-airport-1",
+    "abu-airport-3",
+    "abu-beach-1",
+    "abu-urban-2",
+    "abu-urban-5"
+  ],
+  "report_scenes": [
+    "abu-airport-2",
+    "abu-airport-4",
+    "abu-beach-2",
+    "abu-beach-3",
+    "abu-beach-4",
+    "abu-urban-1",
+    "abu-urban-3",
+    "abu-urban-4"
+  ],
+  "grid_values": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8
+  ],
+  "n_weightings": 728,
+  "default_weights": {
+    "rx": 0.4705882352941177,
+    "ace": 0.29411764705882354,
+    "spatial": 0.23529411764705885
+  },
+  "tuned_weights": {
+    "rx": 0.4444444444444445,
+    "ace": 0.0,
+    "spatial": 0.5555555555555556
+  },
+  "tune_macro_auc": 0.9346709361956306,
+  "report_macro": {
+    "best_single": 0.960097031047414,
+    "default_fused": 0.9493746033038291,
+    "tuned_fused": 0.9540162815019342
+  },
+  "report_rows": [
+    {
+      "scene": "abu-airport-2",
+      "best_single": 0.8959313846556999,
+      "default_fused": 0.8814131217453918,
+      "tuned_fused": 0.8629745452099937,
+      "tuned_beats_best_single": false,
+      "singles": {
+        "rx": 0.8959313846556999,
+        "ace": 0.753514773935538,
+        "spatial": 0.7835490607364531
+      }
+    },
+    {
+      "scene": "abu-airport-4",
+      "best_single": 0.9271361502347417,
+      "default_fused": 0.9401316230717639,
+      "tuned_fused": 0.9066071428571428,
+      "tuned_beats_best_single": false,
+      "singles": {
+        "rx": 0.9271361502347417,
+        "ace": 0.8214755197853789,
+        "spatial": 0.8300972501676727
+      }
+    },
+    {
+      "scene": "abu-beach-2",
+      "best_single": 0.9714070764088043,
+      "default_fused": 0.9494688752402493,
+      "tuned_fused": 0.9749304768198804,
+      "tuned_beats_best_single": true,
+      "singles": {
+        "rx": 0.9520855943524542,
+        "ace": 0.7188861032459646,
+        "spatial": 0.9714070764088043
+      }
+    },
+    {
+      "scene": "abu-beach-3",
+      "best_single": 0.999990899079897,
+      "default_fused": 0.9999817981597938,
+      "tuned_fused": 0.999972697239691,
+      "tuned_beats_best_single": false,
+      "singles": {
+        "rx": 0.9998816880386607,
+        "ace": 0.999990899079897,
+        "spatial": 0.9999271926391757
+      }
+    },
+    {
+      "scene": "abu-beach-4",
+      "best_single": 0.9391717189728959,
+      "default_fused": 0.9406562709784343,
+      "tuned_fused": 0.9395316302341195,
+      "tuned_beats_best_single": true,
+      "singles": {
+        "rx": 0.9391717189728959,
+        "ace": 0.7734650341948478,
+        "spatial": 0.9346082539649241
+      }
+    },
+    {
+      "scene": "abu-urban-1",
+      "best_single": 0.9907950432074001,
+      "default_fused": 0.9857853589196872,
+      "tuned_fused": 0.9925328056185398,
+      "tuned_beats_best_single": true,
+      "singles": {
+        "rx": 0.9725564265654513,
+        "ace": 0.8738105005026213,
+        "spatial": 0.9907950432074001
+      }
+    },
+    {
+      "scene": "abu-urban-3",
+      "best_single": 0.9881073891930345,
+      "default_fused": 0.9685238238841978,
+      "tuned_fused": 0.9844798722588228,
+      "tuned_beats_best_single": false,
+      "singles": {
+        "rx": 0.9881073891930345,
+        "ace": 0.7481084330827998,
+        "spatial": 0.9714486483560671
+      }
+    },
+    {
+      "scene": "abu-urban-4",
+      "best_single": 0.9682365866268383,
+      "default_fused": 0.9290359544311145,
+      "tuned_fused": 0.9711010817772834,
+      "tuned_beats_best_single": true,
+      "singles": {
+        "rx": 0.9428737392366484,
+        "ace": 0.5028650620404412,
+        "spatial": 0.9682365866268383
+      }
+    }
+  ],
+  "top_10_on_tune": [
+    {
+      "macro_auc": 0.9346709361956306,
+      "weights": {
+        "rx": 0.4444444444444445,
+        "ace": 0.0,
+        "spatial": 0.5555555555555556
+      }
+    },
+    {
+      "macro_auc": 0.9346690560255754,
+      "weights": {
+        "rx": 0.45454545454545453,
+        "ace": 0.0,
+        "spatial": 0.5454545454545454
+      }
+    },
+    {
+      "macro_auc": 0.9346472107328523,
+      "weights": {
+        "rx": 0.46153846153846156,
+        "ace": 0.0,
+        "spatial": 0.5384615384615385
+      }
+    },
+    {
+      "macro_auc": 0.934639039260636,
+      "weights": {
+        "rx": 0.12500000000000003,
+        "ace": 0.0,
+        "spatial": 0.875
+      }
+    },
+    {
+      "macro_auc": 0.9346313584068173,
+      "weights": {
+        "rx": 0.4666666666666666,
+        "ace": 0.0,
+        "spatial": 0.5333333333333333
+      }
+    },
+    {
+      "macro_auc": 0.9346240724125314,
+      "weights": {
+        "rx": 0.4285714285714286,
+        "ace": 0.0,
+        "spatial": 0.5714285714285715
+      }
+    },
+    {
+      "macro_auc": 0.9346240724125314,
+      "weights": {
+        "rx": 0.4285714285714286,
+        "ace": 0.0,
+        "spatial": 0.5714285714285715
+      }
+    },
+    {
+      "macro_auc": 0.9346168869688919,
+      "weights": {
+        "rx": 0.14285714285714288,
+        "ace": 0.0,
+        "spatial": 0.8571428571428572
+      }
+    },
+    {
+      "macro_auc": 0.9346017698278555,
+      "weights": {
+        "rx": 0.11111111111111112,
+        "ace": 0.0,
+        "spatial": 0.888888888888889
+      }
+    },
+    {
+      "macro_auc": 0.9345708051820564,
+      "weights": {
+        "rx": 0.4166666666666667,
+        "ace": 0.0,
+        "spatial": 0.5833333333333334
+      }
+    }
+  ]
+}

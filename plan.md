@@ -1330,6 +1330,59 @@ formula rather than by running a sweep.
 
 ---
 
+### D25 — §3A.9's fusion accept criterion is NOT met on ABU, and the prescribed grid search does not rescue it. The criterion is also ambiguous in a way that matters. Measured 2026-08-22 on a held-out split.
+
+D22.1 found the stated default weights losing to their best component. §3A.9's remedy is a grid
+search, so it was run: **728 weightings**, selected on 5 recorded TUNE scenes, evaluated on 8
+REPORT scenes never touched during selection (`experiments/rx_vs_ae/fusion_weights.json` holds
+both lists — ABU is 13 scenes, so tuning and reporting on the same 13 would be train-on-test).
+
+**Report split, scene-macro AUC:**
+
+| `rx` (local) | `ace` | `spatial` | **fused (tuned)** | per-scene oracle |
+|---|---|---|---|---|
+| 0.9522 | 0.7740 | 0.9313 | **0.9540** | 0.9601 |
+
+**The criterion is ambiguous.** "Fused AUC ≥ best single component on ≥ 10 of 13 ABU scenes" can
+mean the best *fixed* component (one detector used everywhere) or the best component *per scene*.
+The second uses the labels to pick a winner scene by scene — it is an **oracle, not an achievable
+detector**, and requiring fusion to beat it is close to requiring fusion to be clairvoyant. The
+fixed reading is the meaningful one and should be what the plan says.
+
+**Under either reading, the criterion fails:**
+
+| comparison | scenes won | required |
+|---|---|---|
+| vs best **fixed** component (`rx`) | 5/8 (62.5%) | 10/13 (76.9%) |
+| vs per-scene **oracle** | 4/8 (50.0%) | 10/13 (76.9%) |
+
+Fusion beats `rx` alone by **+0.0018 macro AUC**. That is noise, not a result.
+
+**ACE contributes nothing, and the optimizer says so unprompted.** The best weighting assigns
+`ace` a weight of **exactly 0.0**, and so do the next four. ACE's own macro is 0.7740 against
+`rx`'s 0.9522, and on `abu-urban-4` it scores **0.5029** — indistinguishable from chance. The
+likely cause is §3A.8's bootstrap: the target signature is the mean spectrum of the top 0.1% of
+pixels *by the base detector*, so on a scene where those pixels are not a coherent material, the
+"signature" is an average of unrelated spectra and ACE measures nothing. This is a property of
+unsupervised signature estimation, not an implementation error — but it means the 4-component
+design is really a 2-to-3-component one.
+
+**What this changes about what may be claimed.** §13 rule 4 already forbids overclaiming for the
+quantum branch; the same discipline applies here. **The report must not say fusion beats its
+components.** The defensible statements are: fusion is *comparable* to the best single detector
+(+0.002 macro, 5/8 scenes) while requiring no per-scene detector choice — which is a real
+operational benefit, since the oracle column is unavailable at inference — and ACE as currently
+bootstrapped does not earn its place. Reporting fusion as the headline detector on this evidence
+would be exactly the kind of claim §13 exists to prevent.
+
+**Not yet checked, and it should be:** all of this is on ABU, where the `index` component cannot
+run at all (D20 — no wavelengths). **HAD100 ships real wavelengths**, so it is the only place the
+4-component fusion the plan actually specifies can be evaluated. It is possible fusion earns its
+keep there and not on ABU. Until that is measured, "fusion underperforms" is a statement about
+the 3-component variant on ABU only, and must be labelled as such.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
@@ -2679,6 +2732,21 @@ interesting one.
 | **P2 — genuinely optional** | `3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net` — and `3E`: the whole quantum arm | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
 | **P3 — deferred, do not start** | `train_alt_arch` · `deep_detector` · `autoencoder` · `quantization` · `onnx_inference` | architecture comparison and deployment polish. Valuable, not load-bearing. |
 | **BLOCKED — never start** | Phase 6 **Tier B** | no instrumented hardware exists (§0.2, §9). Not a scheduling choice. |
+
+**P0 STATUS, 2026-08-22.** Built and tested unless noted:
+
+| item | state |
+|---|---|
+| `3B` train → infer | **done.** `unet_pretext` trained to convergence (40 epochs, best val 0.1243 @ epoch 27, 5.1 h local GTX 1650). `infer.segment_rois` + profile-driven `postfilter` built. **Only 1 of §3B.8's 5 arms is trainable** — three suspended pending O9 (D19), `unet_implanted_lib` blocked on D21. |
+| `local_rx` · `kernel_rx` · `crd` · `streaming_rx` | **done.** Three regularization defects found and fixed along the way (D22, D22.2, D24); `crd` checked and cleared (D22.3). |
+| `fusion` | **done**, component-adaptive per D20. **Default weights do NOT meet §3A.9's accept criterion** — the grid search is still owed (D22.1). |
+| Phase 4 | **done.** §4.1 registry accepts a config-only detector swap; §4.2 `calibrate_threshold_for_recall` returns `(threshold, fp_rate)`. §4.3 `roi_fusion` built. |
+| Phase 5 L1 | in progress — harness + `cascade_recall_audit`. |
+| Phase 7 `demo.py` | in progress. Runs on **HAD100, not EnMAP** (O11); steps 10–11 skip with a stated reason, since 3C and 3E are P2 and unbuilt. |
+
+**The one thing P0 still owes beyond the two in progress:** §3A.9's fusion weight grid search
+(D22.1), including carving out and naming the tuning split — ABU is 13 scenes, so tuning and
+reporting on the same 13 is train-on-test.
 
 **Why this order.** Six half-finished arms score worse than one complete system with its gaps
 documented. §9 and §14 already record what is simulated and what is deferred; deferring
