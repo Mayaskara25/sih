@@ -109,6 +109,14 @@ pixel-micro (labelled). ABU's anomaly density spans a 32× range, so an
 unlabelled "pooled" number is effectively a report on two scenes — §3A.10
 bans one and this harness never produces one.
 
+## QGIS verification
+
+`docs/qgis_verification.md` — how to close **O4**, the last item gating the
+Phase 2 exit criterion. Two checks: affine plumbing on Indian Pines (§2.10),
+and real georeferencing on the HAD100 demo output against a basemap. Do not
+conflate them — Indian Pines' georeferencing is **synthetic** (D2), so its
+polygons land at an arbitrary place on Earth by design.
+
 ## The project's one rule
 
 Dataset facts are either **verified against the files** or **documentation-only**,

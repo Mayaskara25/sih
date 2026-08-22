@@ -20,12 +20,12 @@
         "rx",
         "spatial"
       ],
-      "seconds": 2.477466659001948
+      "seconds": 2.467954968997219
     },
     "4_rois": {
       "n_rois": 3,
       "stage1_recall": 1.0,
-      "induced_fp_rate": 0.05243812790982602
+      "induced_fp_rate": 0.021808380298946335
     },
     "5_segment": {
       "scene_px": 4096,
@@ -39,15 +39,16 @@
     },
     "7_geojson": {
       "path": "experiments/demo/ang20170821t183707_100_demo.geojson",
-      "n_features": 3
+      "n_features": 3,
+      "score_raster": "experiments/demo/ang20170821t183707_100_anom_norm.tif"
     },
     "8_offline": {
       "asserted": true
     },
     "9_metrics": {
-      "wall_clock_s": 13.007788215996698,
-      "detector_s": 2.477466659001948,
-      "peak_alloc_mb": 96.391129,
+      "wall_clock_s": 12.746650278000743,
+      "detector_s": 2.467954968997219,
+      "peak_alloc_mb": 96.410414,
       "pixel_saving_frac": 0.993408203125,
       "measurement": "MEASURED on laptop; edge figures SIMULATED"
     },

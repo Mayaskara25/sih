@@ -284,7 +284,18 @@ def run_demo(*, scene_hdr: Path | None = None, out_dir: Path, assert_offline: bo
         gj = rois_to_geojson(kept, meta, out_dir / f"{meta.scene_id}_demo.geojson")
         validate_geojson(gj)
         print(f"     {gj.name}  ({len(kept)} features)  validate_geojson: PASS")
-        summary["steps"]["7_geojson"] = dict(path=str(gj), n_features=len(kept))
+
+        # Also write the C2 score-raster pair, so the GeoJSON can be checked
+        # AGAINST something in QGIS. Polygons alone on a basemap show only
+        # that they landed plausibly; overlaid on the score raster they show
+        # whether they landed on the pixels the detector actually fired on,
+        # which is the affine-plumbing question §2.10 is really asking.
+        from preprocessing.raster_loader import save_score_raster
+        raw_p, norm_p = save_score_raster(score, meta, out_dir / f"{meta.scene_id}_anom",
+                                          method="fused")
+        print(f"     {norm_p.name}  (score raster, same CRS -- load both in QGIS)")
+        summary["steps"]["7_geojson"] = dict(path=str(gj), n_features=len(kept),
+                                             score_raster=str(norm_p))
 
     # -- 8 -------------------------------------------------------------
     _step(8, "Offline operation")
