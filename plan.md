@@ -1292,6 +1292,44 @@ reference, only against itself and synthetic fixtures.
 
 ---
 
+### D22.3 — `crd`'s `lam=1e-2` is CORRECTLY sized. D22.2's suspicion was wrong, and the negative result closes the question rather than leaving it open.
+
+D22.2 predicted `crd`'s `lam` would be the fourth instance of a transplanted regularization
+constant, and said why the existing §3A.4 accept criterion could not settle it (`lam → ∞` tests
+the regularizer's *direction*, not whether its default *magnitude* is usable). Measured on dense
+30×30 crops of three real ABU scenes, chosen to retain enough positives for a meaningful AUC:
+
+| scene | 1e-6 | 1e-4 | **1e-2** | 1e0 | 1e2 | 1e4 |
+|---|---|---|---|---|---|---|
+| `abu-airport-1` | 0.7485 | 0.8622 | **0.9574** | 0.9518 | 0.9650 | 0.9352 |
+| `abu-beach-2` | 0.7981 | 0.9222 | **0.9762** | 0.9674 | 0.9679 | 0.9793 |
+| `abu-beach-4` | 0.8350 | 0.9548 | **0.9949** | 0.9923 | 0.9976 | 0.9902 |
+
+`lam=1e-2` sits **on the plateau**, not on a cliff: everything from 1e-2 to 1e4 is within ~0.03
+AUC, while 1e-6 costs 0.15–0.21. The default is right.
+
+It also passes the magnitude-response check that exposed `kernel_rx` — the diagnostic D22.2
+recommended precisely because AUC alone would not have caught the kernel failure. Rank of an
+implanted spike, real ABU crop, at the default `lam`:
+
+| spike (σ) | 1 | 3 | 8 | 20 | 50 |
+|---|---|---|---|---|---|
+| rank (of 900) | 42 | 3 | **0** | **0** | **0** |
+
+Rank **responds monotonically to magnitude and saturates at the top**, which is what a working
+detector does. Contrast `kernel_rx` at `reg=1e-6`, where rank was pinned at 481 from 2σ to 50σ.
+
+**Why `crd` escaped and the other three did not.** `lam` multiplies `Gamma^T Gamma`, where
+`Gamma = diag(‖y - x_i‖₂)` is built from the data's own distances — so the regularizer **carries
+the data's scale with it**, and `lam` is already dimensionless relative to the operator it
+regularizes. `global_rx` and `kernel_rx` both added `reg * I`, an absolute term, to operators whose
+scale they did not control. **The lesson generalizes better than "check every constant": a
+regularizer built from the data is scale-safe by construction, one added as a bare identity is
+not.** That is the property to look for in any future detector, and it is checkable by reading the
+formula rather than by running a sweep.
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
