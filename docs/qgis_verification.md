@@ -91,6 +91,27 @@ statement than "the polygons look like they are in Canada."
 
 ---
 
+## Regenerating the projects
+
+```bash
+python3 scripts/build_qgis_project.py        # system python3, NOT .venv/bin/python
+```
+
+Rebuilds both `.qgz` files from the pipeline's current outputs, fully styled.
+Run it after any rerun of `run_pipeline.py` or `demo.py`.
+
+**Use system `python3` deliberately.** PyQGIS cannot be installed into the
+venv: it is not on PyPI, and `qgis/_core.so` is compiled against Python 3.14
+while D1 pins the venv to 3.12.13 for `fiona`. Forcing it via `PYTHONPATH`
+fails on `PyQt6.sip`. Nothing else in the repo imports `qgis`, so the split
+costs nothing.
+
+**A trap in this specific repo:** §2.10 requires output under `qgis/projects/`,
+so a directory named `qgis/` sits at the repo root — and Python imports it as
+a PEP 420 namespace package, shadowing the real PyQGIS. `import qgis`
+**succeeds**; only `qgis.__file__ is None` gives it away. The script strips the
+repo root from `sys.path` before importing for exactly this reason.
+
 ## Saving the project
 
 §2.10 asks for `qgis/projects/phase2_verify.qgz`:

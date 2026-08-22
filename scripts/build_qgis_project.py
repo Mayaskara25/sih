@@ -28,9 +28,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "qgis" / "projects"
 
-# RUN THIS WITH SYSTEM python3, NOT .venv/bin/python. PyQGIS ships as an
-# Arch system package under /usr/lib/python3.14/site-packages and is not pip
-# installable into the venv; the venv genuinely does not have it.
+# RUN THIS WITH SYSTEM python3, NOT .venv/bin/python.
+#
+# PyQGIS CANNOT be installed into the venv, and this is structural rather than
+# a missing step. It is not on PyPI (it ships with the `qgis` system package),
+# and `qgis/_core.so` is a compiled C++ extension built against **Python
+# 3.14**, while D1 pins this venv to **3.12.13** for fiona. Pointing
+# PYTHONPATH at the system site-packages gets as far as
+# `ModuleNotFoundError: No module named 'PyQt6.sip'` -- verified 2026-08-22.
+# The only way to have PyQGIS inside the venv would be to rebuild QGIS against
+# 3.12, which trades a real constraint for a cosmetic one.
+#
+# So the split is deliberate: system python3 for QGIS project generation,
+# .venv/bin/python for the pipeline. Nothing else in the repo imports qgis.
 #
 # And drop any repo-root entry from sys.path FIRST. §2.10 requires the output
 # at `qgis/projects/`, so this repo contains a directory literally named
