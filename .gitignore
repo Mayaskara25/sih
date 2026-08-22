@@ -37,3 +37,15 @@ __pycache__/
 # --- scratch: pasted screenshots from chat sessions ---
 Pasted image*.png
 .agent_progress/
+
+# --- edge branch: derived artefacts (regenerable via `python -m edge.benchmark`) ---
+experiments/edge_benchmarks/*.onnx
+
+# --- Phase 5 Level 2: derived EnMAP crop + its copied sidecar (regenerable) ---
+# `*.tif` above is case-sensitive; EnMAP products ship uppercase `.TIF`.
+*.TIF
+*.TIFF
+experiments/phase5_level2/*-METADATA.XML*
+
+# --- scratch: local downloads folder, not project content ---
+temp , downloads/

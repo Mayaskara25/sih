@@ -1,0 +1,38 @@
+{
+  "scene": "experiments/phase5_level2/ENMAP01-____L2A-DT0000207637_20260724T054307Z_004_V010506_20260725T024614Z_CROP600x402-SPECTRAL_IMAGE_COG.TIF",
+  "source": "enmap",
+  "detector": "global_rx",
+  "threshold_pct": 99.0,
+  "profile": "object",
+  "normalize_method": "standardize",
+  "detector_params": {},
+  "git_sha": "4f47a402ad8c55eae620bb59b606bb045d941e0d",
+  "package_versions": {
+    "numpy": "2.5.2",
+    "scipy": "1.18.0",
+    "rasterio": "1.5.1",
+    "geopandas": "1.1.4",
+    "shapely": "2.1.2",
+    "pyproj": "3.7.2",
+    "scikit-image": "0.26.0"
+  },
+  "timings_s": {
+    "load": 2.682539443994756,
+    "drop_bad_bands": 0.3447742810094496,
+    "standardize": 0.5580749309883686,
+    "detector": 2.7094586550083477,
+    "percentile_normalize": 0.00700830300047528,
+    "threshold": 0.00343536700529512,
+    "morphology": 0.020941541995853186,
+    "mask_to_rois": 0.046469491004245356,
+    "save_score_raster": 0.025800702002015896,
+    "geojson": 0.2580130230053328
+  },
+  "n_rois": 33,
+  "outputs": {
+    "anom_raw": "experiments/phase5_level2/ENMAP01-____L2A-DT0000207637_20260724T054307Z_004_V010506_20260725T024614Z_CROP600x402-SPECTRAL_IMAGE_COG_anom_raw.tif",
+    "anom_norm": "experiments/phase5_level2/ENMAP01-____L2A-DT0000207637_20260724T054307Z_004_V010506_20260725T024614Z_CROP600x402-SPECTRAL_IMAGE_COG_anom_norm.tif",
+    "mask": "experiments/phase5_level2/ENMAP01-____L2A-DT0000207637_20260724T054307Z_004_V010506_20260725T024614Z_CROP600x402-SPECTRAL_IMAGE_COG_mask.tif",
+    "geojson": "experiments/phase5_level2/ENMAP01-____L2A-DT0000207637_20260724T054307Z_004_V010506_20260725T024614Z_CROP600x402-SPECTRAL_IMAGE_COG_rois.geojson"
+  }
+}

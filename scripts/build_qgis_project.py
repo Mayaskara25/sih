@@ -199,6 +199,24 @@ def main() -> int:
                         "position IS the question here."))
         else:
             print("  SKIP demo_verify: run `python pipeline/demo.py` first")
+
+        l2 = ROOT / "experiments" / "phase5_level2"
+        l2_rasters = sorted(l2.glob("*_anom_norm.tif"))
+        l2_vectors = sorted(l2.glob("*_rois.geojson"))
+        if l2_rasters and l2_vectors:
+            build("phase5_level2_verify", l2_rasters[0], l2_vectors[0], basemap=True,
+                  note=("Phase 5 Level 2 (PLAN.md O11/D32): EnMAP L2A, REAL "
+                        "georeferencing (COG GeoTIFF CRS/transform, D-note). This is "
+                        "the QGIS-against-basemap human check the accept criterion "
+                        "requires -- manually identify a feature (coastline, road, "
+                        "field boundary, built structure) near a ROI centroid and "
+                        "confirm it lands within ~2 pixels (~60 m at 30 m GSD) of "
+                        "its true position on OpenStreetMap. NOT yet performed by a "
+                        "human as of this write -- do not treat this project file's "
+                        "existence as the check having passed."))
+        else:
+            print("  SKIP phase5_level2_verify: run "
+                  "`python -m pipeline.run_pipeline --source enmap ...` first")
     finally:
         app.exitQgis()
     return 0

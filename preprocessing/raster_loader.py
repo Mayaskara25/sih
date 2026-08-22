@@ -4,6 +4,11 @@
          .mat we use (D13.1/D13.2/D13.3), so a synthetic affine is attached
          per D2, meta.georef == "synthetic" and meta.wavelengths is None.
 .tif  -> rasterio; real CRS/transform read from the file, meta.georef == "real".
+         An EnMAP L2A product (source="enmap", filename ending
+         "-SPECTRAL_IMAGE_COG.TIF") is dispatched to the same path PLUS a
+         METADATA.XML sidecar parse for wavelengths -- see below. Any other
+         .tif (including every existing fixture/test) is unaffected: the
+         sidecar lookup only fires on that exact filename suffix.
 .hdr  -> spectral.envi for the cube + wavelengths; GDAL's ENVI driver (via
          rasterio, opened on the sibling data file) for CRS/transform/nodata,
          so meta.georef == "real" (D11.5 -- HAD100 ENVI scenes are genuinely
@@ -15,8 +20,20 @@ AVIRIS-Classic wavelength arrays are non-monotonic in the raw header (D11.4)
 and sorting is `preprocessing/harmonize.py`'s job (D9), not the loader's. A
 raw wavelength array is handed to SceneMeta exactly as parsed; validate_scene
 correctly rejects a non-ascending one until it has been harmonized.
+
+EnMAP wavelengths are NOT in the TIFF (verified: no per-band description tags
+in the COG -- PLAN.md D32) -- they live in the sibling
+METADATA.XML/.XML.XML sidecar's <bandCharacterisation>/<bandID> elements.
+`_load_enmap_wavelengths` parses that sidecar and is INTENTIONALLY STRICT: a
+missing sidecar, unparseable XML, a band count mismatch against the cube, or
+a non-finite/non-strictly-ascending wavelength axis all raise rather than
+falling back to `wavelengths=None` -- a real EnMAP product silently entering
+the pipeline with no wavelength array would pass every existing contract
+check and then fail `harmonize()` (D9) confusingly, far from the cause.
 """
 from __future__ import annotations
+
+import xml.etree.ElementTree as ET
 
 from pathlib import Path
 
@@ -92,6 +109,79 @@ def _load_mat(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
     return cube, meta
 
 
+_ENMAP_SPECTRAL_SUFFIX = "-SPECTRAL_IMAGE_COG.TIF"
+
+
+def _find_enmap_metadata_sidecar(spectral_path: Path) -> Path:
+    """Locate the METADATA.XML sidecar for an EnMAP `*-SPECTRAL_IMAGE_COG.TIF`.
+
+    Filenames on disk are inconsistent -- some products end `-METADATA.XML`,
+    others `-METADATA.XML.XML` (verified across the 8 products in
+    data/raw/enmap/: both forms occur). Both are tried; neither existing
+    raises FileNotFoundError rather than silently returning wavelengths=None.
+    """
+    if not spectral_path.name.endswith(_ENMAP_SPECTRAL_SUFFIX):
+        raise ValueError(f"{spectral_path}: not an EnMAP SPECTRAL_IMAGE_COG filename")
+    stem = spectral_path.name[: -len(_ENMAP_SPECTRAL_SUFFIX)]
+    for suffix in ("-METADATA.XML.XML", "-METADATA.XML"):
+        candidate = spectral_path.with_name(stem + suffix)
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        f"{spectral_path}: no METADATA.XML(.XML) sidecar found beside this product -- "
+        "EnMAP wavelengths cannot be recovered without it")
+
+
+def _load_enmap_wavelengths(metadata_path: Path) -> tuple[np.ndarray, str | None]:
+    """Parse <bandCharacterisation>/<bandID> from an EnMAP L2A METADATA.XML.
+
+    Returns (wavelengths [B] float32 nm, acquired ISO-8601 str or None).
+    Ordered by the XML's own `<bandID number="...">` attribute, not file
+    order, then validated: empty, non-finite, or non-strictly-ascending all
+    raise (D11.4 -- a poisoned axis must fail here, not silently reach
+    validate_scene/harmonize downstream).
+
+    Does NOT read GainOfBand/OffsetOfBand (the reflectance scale factor) --
+    SceneMeta has no field for it and this loader does not rescale the cube
+    (see docs/enmap_verified.json / PLAN.md D32 for the value found and why
+    it is recorded but not applied).
+    """
+    try:
+        root = ET.parse(metadata_path).getroot()
+    except ET.ParseError as exc:
+        raise ValueError(f"{metadata_path}: unparseable XML ({exc})") from exc
+
+    # Scoped to <bandCharacterisation> specifically -- the schema reuses
+    # <bandID number="..."> elsewhere (e.g. per-band defective-pixel/artifact
+    # statistics) with DIFFERENT children and no wavelengthCenterOfBand.
+    # root.iter("bandID") over the whole document would pick those up too;
+    # scoping avoids relying on the "no wavelengthCenterOfBand -> skip" guard
+    # below to do that filtering silently.
+    band_char = root.find(".//bandCharacterisation")
+    entries: list[tuple[int, float]] = []
+    for band in (band_char.iter("bandID") if band_char is not None else ()):
+        num = band.get("number")
+        wl_text = band.findtext("wavelengthCenterOfBand")
+        if num is None or wl_text is None:
+            continue
+        entries.append((int(num), float(wl_text)))
+    if not entries:
+        raise ValueError(
+            f"{metadata_path}: no <bandCharacterisation>/<bandID>/"
+            "<wavelengthCenterOfBand> entries found -- unparseable or wrong schema")
+    entries.sort(key=lambda e: e[0])
+    wavelengths = np.array([wl for _, wl in entries], dtype=np.float32)
+
+    if not np.all(np.isfinite(wavelengths)):
+        raise ValueError(f"{metadata_path}: wavelength array contains non-finite values")
+    if not np.all(np.diff(wavelengths) > 0):
+        raise ValueError(
+            f"{metadata_path}: wavelength array is not strictly ascending in bandID order")
+
+    acquired = root.findtext(".//startTime")
+    return wavelengths, acquired
+
+
 def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
     with rasterio.open(path) as ds:
         raw = ds.read()                              # [B, H, W]
@@ -101,15 +191,43 @@ def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
             cube = np.where(cube == np.float32(ds.nodata), np.nan, cube)
         crs, transform = ds.crs, ds.transform
     b = cube.shape[-1]
+
+    # A band that is nodata for EVERY pixel in the scene carries zero
+    # information -- and worse, it poisons every OTHER band's per-pixel
+    # statistics downstream: preprocessing.normalize.standardize's per-band
+    # nanmean/nanvar returns NaN for that one band at every pixel, and
+    # anomaly.rx.global_rx's `~np.any(np.isnan(flat), axis=-1)` validity mask
+    # then excludes EVERY pixel in the scene, not just that band, because
+    # every pixel has a NaN in this one band. Verified concretely: all 8
+    # EnMAP L2A products on disk have bands 131-135 (~1342.8-1390.5 nm, the
+    # edge of the 1350-1450 nm water-absorption window) 100% nodata,
+    # constant across every scene (PLAN.md D32) -- this is not hardcoded to
+    # those indices, since a different product/acquisition could differ;
+    # it is re-derived from the actual pixels on every load.
+    fully_nodata_bands = np.zeros(b, dtype=bool)
+    if np.isnan(cube).any():
+        fully_nodata_bands = np.all(np.isnan(cube.reshape(-1, b)), axis=0)
+
+    wavelengths = None
+    acquired = None
+    if source == "enmap" and path.name.endswith(_ENMAP_SPECTRAL_SUFFIX):
+        metadata_path = _find_enmap_metadata_sidecar(path)
+        wavelengths, acquired = _load_enmap_wavelengths(metadata_path)
+        if wavelengths.shape != (b,):
+            raise ValueError(
+                f"{path}: METADATA.XML sidecar has {wavelengths.shape[0]} bands, "
+                f"cube has {b} -- refusing to attach a mismatched wavelength array")
+
     meta = SceneMeta(
         scene_id=path.stem,
         crs=crs,
         transform=transform,
-        wavelengths=None,
-        bad_bands=np.zeros(b, dtype=bool),
+        wavelengths=wavelengths,
+        bad_bands=fully_nodata_bands,
         gsd_m=abs(transform.a),
         source=source,
         georef="real",
+        acquired=acquired,
     )
     return cube, meta
 

@@ -66,6 +66,38 @@ Li et al., IEEE TGRS 2023, doi:10.1109/TGRS.2023.3258067 · [repo](https://githu
   verified basis for PLAN.md D2's synthetic-affine design.
 - Phase 2 wiring only. **Never used as an anomaly ground truth.**
 
+### EnMAP L2A — `data/raw/enmap/` (2026-08-23, PLAN.md D32)
+
+Promoted from documentation-only. **Eight complete L2A products** (~3.6 GB, 40 files) were found
+already on local disk — see PLAN.md O11/D32 for how that fact sat alongside a "blocked" status
+for two days. Re-derive with `scripts/verify_enmap.py`; writes `docs/enmap_verified.json`.
+
+- `*-SPECTRAL_IMAGE_COG.TIF`: **224 bands, int16, nodata −32768.0, GSD 30 m** — uniform across
+  all 8 products. **CRS is NOT uniform** — EPSG:32642 (×3) / 32643 (×3) / 32644 (×2), UTM zone
+  follows scene longitude, expected and not a defect.
+- Wavelengths ship only in the sidecar `*-METADATA.XML`/`.XML.XML` (inconsistently named — 1 of
+  8 products uses the single suffix, 7 of 8 the double; both are on disk, both must be handled),
+  never in the TIFF. **418.416–2445.30 nm, 224 points, strictly ascending, all finite,
+  byte-identical (SHA-256) across all 8 products** — one wavelength grid, not eight.
+- `GainOfBand` (the reflectance scale factor): **0.0001, uniform** across all 224 bands and all
+  8 products. Recorded; **not applied** by the loader — `SceneMeta` carries no scale-factor
+  field, and this project already leaves ABU's mixed radiometric scales unscaled, so applying it
+  here alone would be an undocumented asymmetry, not a fix.
+- `harmonize.coverage_ok == False` on all 8 (8/184 canonical bands uncovered) — reproduces
+  PLAN.md D16 exactly, independently re-derived rather than assumed from that entry.
+- **A fact D16 did not have, because D16 verified metadata only, never pixel data:** bands
+  131–135 (1342.82–1390.48 nm, the edge of the 1350–1450 nm water-absorption window) are
+  effectively 100% nodata, constant across all 8 products — not the same as the ~30% border
+  nodata every band carries, and it silently zeroes a naive detector's entire valid-pixel set
+  unless flagged (`preprocessing/raster_loader.py` now does, generically, for any `.tif` source).
+- Valid (non-nodata) pixel fraction: **mean 0.740, range 0.697–0.765** across the 8 products.
+- **Still documentation-only for this dataset:** licence/redistribution terms, the DLR Geoservice
+  STAC's 5 000-product cap (a catalogue claim, not re-checked here), and whether the live
+  download leg currently succeeds (PLAN.md O11 — explicitly untested by this entry; CLAUDE.md
+  scopes credential/network checks out of this work).
+- Phase 5 Level 2 ran on one product (a real, georeferenced windowed crop of it — PLAN.md D32);
+  the human QGIS-against-basemap step is pending.
+
 ---
 
 ## DOCUMENTED ONLY — nothing opened yet, treat every number as provisional
@@ -76,7 +108,6 @@ the same as "verified" — HAD100 sat in this tier for one draft.
 
 | Dataset | Claimed | Needs checking |
 |---|---|---|
-| EnMAP L2A | 224 bands, 30 m GSD, DLR Geoservice STAC, 5 000-product cap | band count, dtype, wavelength availability, tile structure, actual no-data handling |
 | Sentinel-2 L2A | ~13 bands multispectral, Copernicus Data Space | band subset per product, resolution mixing (10/20/60 m), Phase 5 Level 3 only |
 | AVIRIS / AVIRIS-NG flightlines | 224 / 425 bands, NASA open portal | per-flightline band count and wavelength file availability |
 | USGS splib07 | `doi:10.5066/F7RR1WDJ`, plus ECOSTRESS/ASTER | record format, resampling convention, wavelength grid, licence terms |
@@ -98,7 +129,12 @@ Hub OAuth flow is **not** used; that dashboard was sunset 2026-03-20 and served 
 
 ## What is buildable while EnMAP is blocked
 
-See [buildable_now.md](buildable_now.md) — the critical path is unblocked; EnMAP L2A access (PLAN.md O11) gates Phase 5 Level 2 only.
+**Correction, 2026-08-23 (PLAN.md D32): EnMAP L2A was never blocking Phase 5 Level 2 — 8 complete
+products were on local disk, verified above, and Level 2 has been run.** The line below is left
+as originally written; only this correction changes it. See [buildable_now.md](buildable_now.md)
+— the critical path was unblocked regardless, and what actually still gates anything EnMAP-related
+is the live DLR download leg (untested by this correction — PLAN.md O11), which matters only for
+*acquiring more* EnMAP scenes or for O12/SpectralEarth, not for Phase 5 Level 2 itself.
 
 <!-- BEGIN test_env.py version table (auto-generated) -->
 ## Environment
