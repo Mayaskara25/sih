@@ -56,7 +56,7 @@ sequence on a real HAD100/AVIRIS scene with real georeferencing.
 
 | stage | state |
 |---|---|
-| Phase 1–2 walking skeleton | done (D14). QGIS eyeball still open (O4) — no GUI in this environment. |
+| Phase 1–2 walking skeleton | **done and signed off (D14, D26).** QGIS verified on 4.2.1 — affine plumbing confirmed, and real georeferencing separately confirmed on HAD100 against OpenStreetMap. |
 | 3A.1 `harmonize` | done (D15). 425/224 native bands → 184 canonical. |
 | 3B background pool | done (D17). `[2088, 64, 64, 184]`, 6.29 GB, memmap-built after an OOM kill. |
 | 3B synth → train → infer | done (D19). **`unet_pretext` trained**: 40 epochs, best val 0.1243, 5.1 h on the GTX 1650. |
@@ -93,7 +93,7 @@ Two habits came out of this and are worth keeping:
 
 ## 6. What is still owed
 
-**Nothing blocks a working prototype.** Remaining items are reporting and reach:
+**Nothing blocks a working prototype, and O4 is now closed (D26).** Remaining items are reporting and reach:
 
 - **§3A.9 fusion weights** — the sweep ran (D25) and the criterion fails. Do
   not report fusion as beating its components; `crd` (0.9674 ABU macro) is the
@@ -102,6 +102,5 @@ Two habits came out of this and are worth keeping:
   account, restore `SPECTRA_POOLS["lib"]` and with it `unet_implanted_lib`,
   turning §3B.8's headline comparison from one arm into two. Run
   `scripts/fetch_speclib.py --check` for the current instructions.
-- **O4 QGIS eyeball** — needs a human with a GUI.
 - **O9 wavelength recovery** — would un-suspend three §3B.8 arms and the
   `index` fusion component on ABU/HYDICE at once.

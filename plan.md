@@ -1406,6 +1406,66 @@ looks exactly like a result.
 
 ---
 
+### D26 — O4 CLOSED. QGIS verification done 2026-08-22 on QGIS 4.2.1: affine plumbing confirmed on Indian Pines, and **real georeferencing confirmed against an independent basemap** on HAD100 — the stronger check Phase 2 was never going to give.
+
+**Check A — affine plumbing (§2.10's actual ask).** `qgis/projects/phase2_verify.qgz`,
+Indian Pines, magma 0–1 raster + red ROI outlines labelled by `roi_id`. Raster renders with
+structure; the 3 ROIs sit on high-score pixels. No offset, mirror, rotation or scale error.
+**Phase 2 exit criterion is signed off.** Note this project deliberately carries **no basemap**:
+Indian Pines georeferencing is synthetic (D2/D13.1), so real-world position is meaningless here
+and a basemap would invite exactly the wrong conclusion.
+
+**Check B — real georeferencing, and this is the one that matters.**
+`qgis/projects/demo_verify.qgz`, HAD100 scene `ang20170821t183707_100`, EPSG:32611, against
+OpenStreetMap. The scene lands on **Dogpound Creek, Alberta, Canada** — matching the transform of
+the GeoTIFF's own bounds (−114.501…−114.499, 51.440…51.442) computed independently of QGIS. At
+1:301 and 1:64 the red outlines trace the bright pixels **including the cross-shaped notches of
+the mask boundary**, so the polygons follow the actual connected component rather than its
+bounding box.
+
+**Three independent lines of evidence now agree** on the same affine, which is what makes this
+worth recording rather than just ticking:
+1. the ENVI header's own UTM `map info`, parsed via GDAL (D14.2);
+2. an OpenStreetMap basemap placing the scene on a named real-world feature;
+3. **a derived GSD** — a 3-pixel ROI reports 26.5 m², implying ~3 m ground sample distance, which
+   matches AVIRIS-NG. This one is the most useful of the three because it is independent of the
+   basemap: a transform wrong by a scale factor would have to be wrong by a *plausible* factor to
+   survive it.
+
+**What this does NOT establish.** Phase 5 Level 2's accept criterion is "polygon centroids for a
+**manually identified feature** land within 2 pixels (~2 GSD) of its true position." That needs a
+target whose true position is independently known; the ROIs here are unlabelled anomalies over
+scrubland with no ground truth to compare against. So: **scene-level placement is verified,
+feature-level accuracy is not.** Level 2 stays open on that criterion, and no location-accuracy
+number may be quoted from this check.
+
+**Two QGIS-project bugs found and fixed getting here, both of which produced convincing false
+signals.** They are recorded because the next person to regenerate these projects will hit them.
+
+*The project had no CRS.* Every layer was individually correct — raster EPSG:32611, ROIs
+EPSG:4326, OSM EPSG:3857 — and `QgsProject.crs()` was **empty**, so on-the-fly reprojection
+misplaced the basemap. The raster rendered, the polygons rendered, and OSM painted a detailed,
+plausible French town underneath, which reads as *"the georeferencing is broken"* rather than
+*"the project has no CRS."* The arithmetic that settles it: read the scene's UTM easting/northing
+(673818, 5701837) as **Web Mercator** metres and you get lon 6.05, lat 45.5 — Montmélian, France,
+exactly where the tiles drew. The data was right the whole time.
+
+*A `Null` default view extent* opened the project at scale 1:1 near the origin while the data sat
+at easting ~500 000, giving a blank white canvas with both layers correctly loaded and styled —
+again indistinguishable from a styling failure.
+
+**And one import trap worth keeping.** §2.10 requires output under `qgis/projects/`, so this repo
+contains a directory named `qgis/`, which Python imports as a PEP 420 **namespace package**,
+shadowing the real PyQGIS. `import qgis` *succeeds*; only `qgis.__file__ is None` reveals it. That
+check was run, passed, and was reported as "PyQGIS available in the venv" — it is not there at all
+(it is an Arch system package under `/usr/lib/python3.14`). `scripts/build_qgis_project.py` now
+strips the repo root from `sys.path` before importing and **must be run with system `python3`**.
+
+The common thread across all three, and with D22/D24/D25 earlier the same day: **a check that
+passes for the wrong reason is worse than one that fails.**
+
+---
+
 ## 2. Frozen Contracts v1.0
 
 Implemented in `core/contracts.py`. **No branch may redefine these locally.** Every contract has a validator, and every validator is called at every module boundary in debug mode.
@@ -2847,7 +2907,7 @@ Train/test leakage would invalidate every number in the report, and it is the ki
 | O10 | **Credential expiry** | CDSE S3 key pairs are created with a caller-chosen expiry date (§4.1b). An expired key fails Phase 5 Level 3 at the download leg, and the symptom looks like a service outage rather than an auth problem. | Choose a long expiry at creation; diarise it. `scripts/check_credentials.py` reports configuration but **cannot** detect an expired-but-present key — only a real request can. Re-check before Phase 5. |
 | O11 | **EnMAP download entitlement — CONFIRMED, blocking Phase 5 L2** | Resolved from open question to established fact on 2026-08-21 by `scripts/verify_access.py`. The account authenticates: a CAS login naming **no service** returns **HTTP 200 with a TGC cookie**. The *same* credentials in a login naming the EnMAP download service return **401**, and an HTTP-Basic request to the asset returns **403** whose body reads *"insufficient privileges to download this dataset"*. CAS authorises **per service**, so a missing entitlement is byte-indistinguishable from a wrong password unless the two logins are compared — which cost this project an hour of misdiagnosis. EnMAP archive access needs a **role assignment** via the Instrument Planning Portal, and `planning.enmap.org` / `enmap-planning.eoc.dlr.de` resolve in DNS but **refuse TCP connections**. §2.1 makes EnMAP half the background pool, so Phase 5 Level 2 is blocked until this clears. | **Diagnosis refined 2026-08-21.** There is no separate "EnMAP Access Service account": the register link on the EnMAP login page points at the *same* `sso.eoc.dlr.de/geoservice/selfservice` registration, so one account covers both. The EnMAP Access Service was subscribed in the Geoservice Permission Management App (`/eoc/kc/realms/geoservice/account/#/permissions`) and still shows in *Permissions you are subscribed to*, yet CAS continues to deny the service. Authentication succeeds and **authorization** fails — the browser error reads *"Service access denied due to missing privileges… you are actually logged into another of our services with another account."* Note the two systems: permissions live in **Keycloak** (realm `geoservice`), the download wall is **CAS** (`/eoc/auth/login`); a stale session in one can shadow the other, so test in a window with no other DLR tab open. 1. If it persists, contact **`eoc-ums-helpdesk@dlr.de`** (the address the login page itself gives for user-management problems) — *not* `erdbeobachtung@dlr.de`, which handles the 5 000-product contingent, a different question. 2. Re-run `scripts/verify_access.py` — it PASSes only on real TIFF magic bytes. 3. **Until it passes, build the background pool from AVIRIS-NG alone** and mark every affected §3B row accordingly. Do not write Level 2 code against assumed EnMAP access. |
 | O12 | **SpectralEarth — candidate for the self-supervised arm** | The EOC Geoservice EnMAP catalogue (`geoservice.dlr.de/web/datasets/enmap`) holds four collections, not one. Besides L2A: **SpectralEarth** — 538 974 patches / 415 153 locations / 11 636 EnMAP scenes, ~3.3 TB, built expressly for self-supervised hyperspectral pretraining (arXiv 2408.08447) — and **HyBiomass** (EnMAP L2A + GEDI L4A labels). §5.2's masked-band SSL arm currently pretrains on the local background pool; SpectralEarth is the same idea three orders of magnitude larger. Caveats: it is **non-georeferenced** (fine for pretraining, useless for the geospatial arm), it is 3.3 TB against 7.8 GB currently on disk so only a subset is usable, and it sits behind the **same** EnMAP Access Service wall as L2A (verified 2026-08-21: all of L2A, SPECTRAL_EARTH and HYBIOMASS redirect to the same CAS login), so O11 blocks it too. **L0 Quicklooks is open with no login at all** (HTTP 200) but ships quicklooks and quality masks, not cubes — no use as a background pool. | Decide only after O11 clears and after §8.0 verifies EnMAP band/wavelength facts. Check `github.com/AABNassim/spectral_earth` for a subset or mirror first — a 3.3 TB pull is out of scope regardless. Do not let a foundation-model detour displace the critical path in §11. |
-| O4 | **QGIS install** | `which qgis` → not found. Gates the Phase 2 exit criterion and the Phase 7 demo. **As of D14 (2026-08-21), it is now the ONLY thing gating Phase 2 exit** — the rest of the walking skeleton is built, tested (54 tests), and run end to end on Indian Pines. | Install, then build `qgis/projects/phase2_verify.qgz` and do the visual check. Until then, the programmatic affine-plumbing check in D14 stands as partial (not sufficient) evidence. |
+| ~~O4~~ | ~~**QGIS install**~~ | **CLOSED 2026-08-22 (D26).** QGIS 4.2.1 installed; `qgis/projects/phase2_verify.qgz` built and checked — affine plumbing confirmed, **Phase 2 exit signed off**. `demo_verify.qgz` additionally confirmed real georeferencing on HAD100 against OpenStreetMap (Dogpound Creek, Alberta). Feature-level Level 2 accuracy remains open — no independently-known target exists in that scene. | — |
 | O5 | **Level-3 case-study site** | Depends on the `landcover` profile and Sentinel-2 coverage of a known dated event. | Pick during Phase 5 from actual data availability; record the selection rationale in `docs/validation.md`. |
 | O6 | **Fusion weight tuning split** | Which ABU scenes are the tuning split vs. the reporting set. Must be fixed **before** any number is reported, or the fused AUC is optimistically biased. | Fix a seeded 4/9 split at the start of 3A.9, commit the split file, never revisit it. |
 | ~~O8~~ | **ABU/HYDICE/Indian Pines carry no wavelength arrays (D13.4)** | **CLOSED — decided, not open.** Option 2 is adopted: learned models score on HAD100 only; classical detectors keep ABU + HYDICE + HAD100. Written into §3B.8, §13 rule 6, and the C1 contract. **No longer blocks 3B.** The cost — LODO cut from five arms to three, single-sensor generalization — is stated in §3B.8 rather than absorbed silently. |
