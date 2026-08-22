@@ -1,0 +1,26 @@
+{
+  "scene": "abu-beach-2",
+  "dataset": "abu",
+  "detector": "global_rx",
+  "target_recall": 0.98,
+  "threshold": 213.7074737548828,
+  "induced_fp_rate": 0.15942028985507245,
+  "n_components_total": 60,
+  "n_components_missed": 1,
+  "missed": [
+    {
+      "component": 18,
+      "n_px": 1,
+      "extent": [
+        29,
+        34,
+        30,
+        35
+      ],
+      "mean_score": 174.89837646484375,
+      "max_score": 174.89837646484375,
+      "threshold": 213.7074737548828,
+      "margin": 38.80909729003906
+    }
+  ]
+}
