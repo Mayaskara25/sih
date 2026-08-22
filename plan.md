@@ -1624,7 +1624,7 @@ have failed a test. That is now the branch's own restatement of the lesson D22/D
 
 ---
 
-### D28 — the fidelity quantum kernel **exponentially concentrates**, and on held-out flightlines it scores *below chance*. Same failure mode as D22.2, different cause, and this one no regularizer fixes. Measured 2026-08-22 on the real split.
+### D28 — the fidelity quantum kernel **exponentially concentrates**, and as specified it scores *below chance* on held-out flightlines. Same failure mode as D22.2, and the cure is the angle encoding scale, not the regularizer — one constant moves test AUC from 0.378 to 0.693. Measured 2026-08-22 on the real split.
 
 Found by integration, not by any unit test — `tests/test_quantum_kernel.py`'s 11 tests all pass,
 including a sign-orientation test that requires AUC > 0.5 **on the training split**, where the
@@ -1636,46 +1636,71 @@ arm scores 0.98.
 | ν | train AUC | val AUC | **test AUC** |
 |---|---|---|---|
 | 0.01 | 0.9838 | 0.6872 | **0.3775** |
-| 0.05 | 0.9839 | 0.6871 | **0.3780** |
 | 0.10 | 0.9847 | 0.6872 | **0.3780** |
-| 0.30 | 0.9823 | 0.6831 | **0.3774** |
 | 0.50 | 0.9628 | 0.6754 | **0.3817** |
 
-Flat in ν, so it is not a regularization-strength problem — D22.2's fix does not apply. And 0.38
-is not *failure*, it is **inversion**: a model with no signal scores 0.5. The arm ranks anomalies
-as more normal than background on the held-out flightlines, consistently.
+0.38 is not *failure*, it is **inversion**: a model with no signal scores 0.5. The arm ranks
+anomalies as more normal than background on the held-out flightlines, consistently.
+
+**Flatness in ν is not evidence of anything, and an earlier draft of this note treated it as
+though it were.** `ν` in `OneClassSVM` is an outlier-fraction bound, not a kernel regularizer;
+with a near-identity Gram every point is its own support vector whatever `ν` says. Flatness in
+`ν` is what a concentrated kernel *predicts*. The knob that actually tests the hypothesis is the
+one that sets pairwise distance — the **angle encoding scale**.
 
 **The cause: kernel concentration.** Mean off-diagonal of the background Gram, against a diagonal
 pinned at 1.0:
 
-| feature map | mean off-diag | p99 | train | val | test |
-|---|---|---|---|---|---|
-| `zz`, reps=1 | 0.0484 | 0.944 | 0.9751 | 0.7880 | 0.5658 |
-| `zz`, reps=2 (**as specified**) | 0.0384 | 0.901 | 0.9847 | 0.6872 | **0.3780** |
-| `zz`, reps=3 | 0.0329 | 0.861 | — | — | — |
-| `z`, reps=2 | 0.1980 | 0.982 | 0.7409 | 0.6369 | 0.5583 |
+| feature map | mean off-diag | train | val | test |
+|---|---|---|---|---|
+| `zz`, reps=1 | 0.0484 | 0.9751 | 0.7880 | 0.5658 |
+| `zz`, reps=2 (**as specified**) | 0.0384 | 0.9847 | 0.6872 | **0.3780** |
+| `zz`, reps=3 | 0.0329 | — | — | — |
+| `z`, reps=2 | 0.1980 | 0.7409 | 0.6369 | 0.5583 |
 
 The Gram is **near-identity**: the kernel declares almost every pair of pixels nearly orthogonal.
-Concentration deepens monotonically with `reps`, exactly as the exponential-concentration results
-for fidelity kernels predict, and **train AUC rises while test AUC falls as it deepens**. A
-near-identity Gram lets the one-class SVM memorize the 300 training background points — which is
+Concentration deepens monotonically with `reps`, as the exponential-concentration results for
+fidelity kernels predict, and **train AUC rises while test AUC falls as it deepens**. A
+near-identity Gram lets the one-class SVM memorize its 300 training background points — which is
 what 0.98 train AUC actually measures. This is D22.2's lesson recurring: *the score stopped
-depending on the data and started reporting "were you in the training set?"* There the cure was
-sizing the ridge to the data; here the concentration is a property of the feature map itself, and
-no `ν` reaches it.
+depending on the data and started reporting "were you in the training set?"*
 
-(Aside: `pauli` with default Paulis reproduces `zz` to the digit — `pauli_feature_map`'s default
-`paulis=['Z','ZZ']` **is** the ZZ map. §3E.2 offers three `kind` values and two of them are the
-same circuit. Worth knowing before anyone reports them as independent configurations.)
+**And the angle scale does reach it.** `build_split` MinMaxes to `[0, π]`; rescaling the same
+features by a constant before encoding, everything else fixed at `zz reps=2`:
 
-**Why the inversion, specifically.** D27.9 measured that 33.8 % of test rows sit clipped at the
-encoding boundary and that clipping hits **background** (39.3 %) harder than **anomalies**
-(28.3 %). So on the test flightlines it is the *background* that sits far from the training
-background distribution. A memorizing one-class model therefore calls background anomalous and
-anomalies normal. D27.9 identified the mechanism; this is its consequence, and the two were
-measured independently.
+| angle range | mean off-diag | train | **val** | test |
+|---|---|---|---|---|
+| `[0, π]` (default) | 0.0384 | 0.9847 | 0.6872 | 0.3780 |
+| `[0, π/2]` | 0.0706 | 0.9291 | **0.7044** | **0.6926** |
+| `[0, π/4]` | 0.1549 | 0.7672 | 0.5942 | 0.6703 |
+| `[0, π/8]` | 0.4190 | 0.6184 | 0.4827 | 0.6140 |
+| `[0, π/16]` | 0.8446 | 0.5038 | 0.3569 | 0.5861 |
 
-**The classical baselines on the identical 8 features, identical split** — which is the entire
+**Selecting on val — never on test — picks `[0, π/2]`, and that configuration scores 0.693 on
+test against 0.378 for the default.** So the concentration is *not* intrinsic to the feature map;
+it is intrinsic to the feature map **at this angle scale**, and one constant fixes it. The
+earlier claim in this note that "no regularizer reaches it" was wrong, and it was wrong because
+the sweep had been run over the parameter that could not have shown it.
+
+**Mechanism, measured directly rather than inferred.** D27.9 established that boundary clipping
+hits test background harder than test anomalies; D28 claimed the inversion followed. Those are
+different quantities, so the link was measured: mean kernel similarity of each test row to the
+300 training-background rows —
+
+| | mean similarity to train background |
+|---|---|
+| test **background** rows | 0.00466 |
+| test **anomaly** rows | 0.00550 |
+| *(train background / train anomaly, for contrast)* | *0.04158 / 0.01264* |
+
+On test, background really is **farther** from the training background than the anomalies are,
+and the ordering is **flipped relative to train**, where it is normal. Raw similarity used
+directly as an anomaly score gives test AUC 0.391 — essentially the fitted model's 0.378, so the
+inversion is almost entirely this one effect and not an artefact of the SVM. Note also the
+absolute scale: test rows sit ~9× farther from the training background than training rows do.
+That is the flightline domain shift of D27.9, quantified in kernel space.
+
+**The classical baselines on the identical 8 features, identical split****The classical baselines on the identical 8 features, identical split** — which is the entire
 point of building the comparison this way:
 
 | detector | train | val | test |
@@ -1683,18 +1708,28 @@ point of building the comparison this way:
 | Mahalanobis / RX | 0.8255 | 0.7396 | **0.6635** |
 | `OneClassSVM(rbf, gamma=1.0)` | 0.7573 | 0.5613 | 0.5797 |
 | `OneClassSVM(rbf, gamma="scale")` | 0.6053 | 0.4508 | 0.5568 |
-| quantum kernel, best config (`zz` reps=1) | 0.9751 | 0.7880 | 0.5658 |
-| quantum kernel, as specified (`zz` reps=2) | 0.9847 | 0.6872 | **0.3780** |
+| quantum kernel, as specified (`zz` reps=2, `[0, π]`) | 0.9847 | 0.6872 | **0.3780** |
+| quantum kernel, val-selected angle scale (`[0, π/2]`) | 0.9291 | 0.7044 | **0.6926** |
 
-**Plain RX on eight PCA components beats every quantum-kernel configuration on held-out
-flightlines**, and it is four lines of numpy. That is a legitimate result for §3E.6's table and
-it is the opposite of an advantage claim, which is what §13 rule 4 exists to protect.
+**This comparison is not yet fair, and must not be reported as though it were.** The quantum
+kernel now carries a hyperparameter selected on val; RX carries none — it was run once, untuned,
+in four lines of numpy. Preferring the tuned arm over the untuned one measures **tuning budget**,
+which is the same error as D27.3's supervision mismatch one level down. Before any row of §3E.6's
+table is written, every classical arm gets a val-selected sweep of comparable size (γ for the
+RBF arms, latent width for the AE, ridge for RX). Whatever the outcome then, it is a fair
+comparison; right now 0.6926 against 0.6635 is not a result, it is an artefact of who got tuned.
 
-**What gets reported.** Both: `reps=2` because §3E.5 specifies it, and `reps=1` / `z` because the
-sweep is what identifies the cause. Selecting the best configuration silently and reporting one
-number would hide the finding, and the finding is more valuable than the number. Note also that
-the sweep above reads **val**, never test, for any selection — test appears in this note as a
-measurement, and no configuration was chosen by it.
+**What gets reported.** Both configurations of the kernel arm: `zz reps=2` at `[0, π]` because
+§3E.5 specifies it, and the val-selected angle scale because the sweep is what identifies the
+cause. Selecting the best silently and reporting one number would hide the finding, and the
+finding is worth more than the number.
+
+**Sweep affordability is asymmetric, and that asymmetry is a stated limitation.** Statevector
+Grams cost seconds, so the kernel arm can be swept freely. A VQC fit is ~35 min and a QAE fit
+~15 min (measured), so neither is swept, and both are reported at the default `[0, π]` scale with
+their angle-scale sensitivity **untested**. Given the size of the effect measured here — 0.378 to
+0.693 from one constant — that is a substantial unknown, and the report says so rather than
+implying the defaults were chosen.
 
 **Third time this pattern has produced a defect in this project** (D22, D22.2, now D28): a
 detector whose training-set behaviour is excellent and whose held-out behaviour is inverted, with
