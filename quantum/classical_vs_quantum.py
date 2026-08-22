@@ -221,6 +221,14 @@ class Row:
 class ArmInfo:
     """Arm-level (not per-scene) bookkeeping -- merged into
     `results_pooled.csv` and recorded in full in the manifest.
+
+    `fit_wall_clock_s` is the SELECTED candidate's own `arm.fit_seconds`
+    (D27.4's simulator-time column) -- NOT the time spent sweeping every
+    candidate to find it. `sweep_wall_clock_s` is that total. Conflating the
+    two would silently reintroduce the exact tuning-budget error the sweep
+    itself exists to make visible (D28's rewrite, point 3): a 12-point
+    OCSVM grid would report ~12x its winning fit's cost in the column a
+    reader uses to compare per-arm cost against VQC's single unswept fit.
     """
     row_id: str
     arm: str
@@ -229,6 +237,7 @@ class ArmInfo:
     params: dict
     sweep_table: list = field(default_factory=list)
     fit_wall_clock_s: float | None = None
+    sweep_wall_clock_s: float | None = None
     wall_clock_kind: str = ""
     circuit_info: dict | None = None
     val_threshold: float | None = None
@@ -239,8 +248,8 @@ class ArmInfo:
 
 # ---------------------------------------------------------------- val-only sweep --
 
-def _select_on_val(build_fn, candidates: list[dict], split: QuantumSplit, seed: int
-                    ) -> tuple[object, dict, list[dict]]:
+def _select_on_val(build_fn, candidates: list[dict], split: QuantumSplit, seed: int,
+                    *, extra_fn=None) -> tuple[object, dict, list[dict]]:
     """Fits `build_fn(seed=seed, **kwargs)` for every `kwargs` in
     `candidates`, scores `split.X_val`, and returns the arm with the highest
     val ROC-AUC -- NEVER touching `split.X_test`/`y_test` or any
@@ -253,6 +262,14 @@ def _select_on_val(build_fn, candidates: list[dict], split: QuantumSplit, seed: 
     docstring) and the quantum kernel's `quantum_kernel_spec` row reuse the
     exact same code path as the swept arms, with `swept = len(candidates) > 1`
     the only thing that differs downstream.
+
+    `extra_fn`, when given, is called as `extra_fn(fitted_arm)` on EVERY
+    candidate (not just the winner) and its return value merged into that
+    candidate's `sweep_table` row under `"extra"`. This is how D28's kernel-
+    concentration diagnostic gets recorded per swept angle_scale, not just
+    for the selected one -- the whole point of the diagnostic is the
+    scale -> concentration -> val AUC relationship, which is invisible if
+    only the winning scale's Gram is ever measured.
 
     Returns (best_arm, best_params, sweep_table) -- `sweep_table` records
     EVERY candidate's params and val AUC (not just the winner), so the
@@ -271,7 +288,10 @@ def _select_on_val(build_fn, candidates: list[dict], split: QuantumSplit, seed: 
             auc = float(roc_auc_score(y_val, val_scores))
         else:
             auc = float("nan")
-        table.append({"params": kwargs, "val_auc": None if np.isnan(auc) else auc})
+        entry = {"params": kwargs, "val_auc": None if np.isnan(auc) else auc}
+        if extra_fn is not None:
+            entry["extra"] = extra_fn(arm)
+        table.append(entry)
         if best is None:
             best = (arm, auc, kwargs)
         elif not np.isnan(auc) and (np.isnan(best[1]) or auc > best[1]):
@@ -351,9 +371,10 @@ def _slots(*, smoke: bool) -> list[dict]:
              supervision="unsupervised"),
         dict(row_id="quantum_kernel_spec", build_fn=_build_kernel,
              candidates=[dict(kind="zz", reps=2, angle_scale=1.0)],
-             supervision="unsupervised"),
+             supervision="unsupervised", extra_fn=_kernel_concentration),
         dict(row_id="quantum_kernel_valscale", build_fn=_build_kernel,
-             candidates=kernel_scale_grid, supervision="unsupervised"),
+             candidates=kernel_scale_grid, supervision="unsupervised",
+             extra_fn=_kernel_concentration),
     ]
 
 
@@ -545,7 +566,8 @@ def main(argv: list[str] | None = None) -> int:
         t0 = time.perf_counter()
         try:
             arm, best_params, sweep_table = _select_on_val(
-                slot["build_fn"], slot["candidates"], split, args.seed)
+                slot["build_fn"], slot["candidates"], split, args.seed,
+                extra_fn=slot.get("extra_fn"))
             _validate_supervision(arm.supervision, row_id)
         except Exception as exc:                                     # noqa: BLE001
             # `slot["supervision"]` (static, module docstring's D27.3 table)
@@ -561,13 +583,21 @@ def main(argv: list[str] | None = None) -> int:
                                          status=f"FAILED:{type(exc).__name__}", note=note)
             continue
 
-        fit_s = time.perf_counter() - t0
+        sweep_s = time.perf_counter() - t0
+        # The SELECTED candidate's own fit time, not the sweep total above
+        # -- see ArmInfo's docstring. Falls back to sweep_s only if an arm
+        # class doesn't expose fit_seconds (none of this branch's arms
+        # omit it, but a bare fallback beats an AttributeError here).
+        fit_s = getattr(arm, "fit_seconds", None)
+        if fit_s is None:
+            fit_s = sweep_s
         swept = len(slot["candidates"]) > 1
 
         try:
             val_scores = np.asarray(arm.score(split.X_val))
             thr, fp_rate = calibrate_threshold_for_recall(
                 val_scores, split.y_val, target_recall=args.target_recall)
+            thr, fp_rate = float(thr), float(fp_rate)   # np.float64 -> float (JSON-clean manifest)
         except Exception as exc:                                     # noqa: BLE001
             thr, fp_rate = None, None
             thr_note = f"val threshold calibration failed: {type(exc).__name__}: {str(exc)[:150]}"
@@ -576,12 +606,19 @@ def main(argv: list[str] | None = None) -> int:
 
         info = ArmInfo(row_id=row_id, arm=arm.name, supervision=arm.supervision, swept=swept,
                         params=best_params, sweep_table=sweep_table,
-                        fit_wall_clock_s=fit_s, wall_clock_kind=_wall_clock_kind(row_id),
+                        fit_wall_clock_s=float(fit_s), sweep_wall_clock_s=float(sweep_s),
+                        wall_clock_kind=_wall_clock_kind(row_id),
                         circuit_info=arm.circuit_info(), val_threshold=thr,
                         val_threshold_fp_rate=fp_rate, note=thr_note)
         arm_infos[row_id] = info
 
         if row_id in ("quantum_kernel_spec", "quantum_kernel_valscale"):
+            # Selected-candidate diagnostic, kept at the top level for quick
+            # access; `info.sweep_table`'s own `"extra"` entries (populated
+            # via _select_on_val's extra_fn=_kernel_concentration above) carry
+            # the SAME diagnostic for every swept angle_scale, not just this
+            # one -- D28's point is the scale -> concentration -> val AUC
+            # relationship, which only the full sweep_table shows.
             kernel_concentration[row_id] = _kernel_concentration(arm)
 
         scene_rows = _score_test_scenes(arm, row_id, arm.name, arm.supervision, scenes, split,
@@ -592,8 +629,24 @@ def main(argv: list[str] | None = None) -> int:
         n_ok = sum(1 for r in scene_rows if r.status == "ok")
         macro_auc = np.nanmean([r.roc_auc for r in scene_rows if r.roc_auc is not None]) \
             if n_ok else float("nan")
-        print(f"  {row_id:26s} swept={swept!s:5s} fit {fit_s:6.2f}s  "
+        print(f"  {row_id:26s} swept={swept!s:5s} fit {fit_s:6.2f}s (sweep total {sweep_s:6.2f}s)  "
               f"scenes ok {n_ok}/{len(scene_rows)}  scene-macro roc_auc {macro_auc:.4f}", flush=True)
+
+    # D28's kernel-concentration diagnostic set, per the coordinator's
+    # explicit follow-up: `zz reps=1` is recorded here as a DIAGNOSTIC-ONLY
+    # Gram measurement (never scored on test scenes, never a `results.csv`
+    # row) -- the original brief asked for it as a scored row, the rewrite's
+    # "two labelled rows" instruction narrowed the SCORED table to
+    # `quantum_kernel_spec`/`quantum_kernel_valscale`, and this preserves
+    # the reps -> concentration relationship the original D28 note used to
+    # diagnose the failure without reintroducing a third scored kernel row.
+    try:
+        reps1_arm = _build_kernel(seed=args.seed, kind="zz", reps=1, angle_scale=1.0)
+        reps1_arm.fit(split)
+        kernel_concentration["zz_reps1_scale1.0_diagnostic_only"] = _kernel_concentration(reps1_arm)
+    except Exception as exc:                                          # noqa: BLE001
+        kernel_concentration["zz_reps1_scale1.0_diagnostic_only"] = {
+            "status": f"FAILED:{type(exc).__name__}", "note": str(exc)[:180]}
 
     df = pd.DataFrame([vars(r) for r in all_rows])
     df.to_csv(out_dir / "results.csv", index=False)
@@ -605,6 +658,7 @@ def main(argv: list[str] | None = None) -> int:
         info_rows.append(dict(
             row_id=info.row_id, arm=info.arm, supervision=info.supervision, swept=info.swept,
             params=json.dumps(info.params), fit_wall_clock_s=info.fit_wall_clock_s,
+            sweep_wall_clock_s=info.sweep_wall_clock_s,
             wall_clock_kind=info.wall_clock_kind,
             circuit_depth=(info.circuit_info or {}).get("depth"),
             n_qubits=(info.circuit_info or {}).get("n_qubits"),
@@ -627,6 +681,7 @@ def main(argv: list[str] | None = None) -> int:
             swept=arm_infos[row_id].swept, params=arm_infos[row_id].params,
             sweep_table=arm_infos[row_id].sweep_table,
             fit_wall_clock_s=arm_infos[row_id].fit_wall_clock_s,
+            sweep_wall_clock_s=arm_infos[row_id].sweep_wall_clock_s,
             wall_clock_kind=arm_infos[row_id].wall_clock_kind,
             circuit_info=arm_infos[row_id].circuit_info,
             val_threshold=arm_infos[row_id].val_threshold,
