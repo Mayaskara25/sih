@@ -22,9 +22,18 @@ import requests
 
 from core import credentials
 from core.http_guard import assert_magic
+from core import cdse_s3
 
 STAC = "https://geoservice.dlr.de/eoc/ogc/stac/v1/collections/ENMAP_HSI_L2A/items?limit=1"
 CAS = "https://sso.eoc.dlr.de/eoc/auth/login"
+
+CDSE_CATALOGUE = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
+# Any recent, real Sentinel-2 L2A product over India works -- resolved live rather
+# than pinned to one scene ID, so this probe never goes stale as CDSE's archive moves.
+CDSE_PROBE_FILTER = (
+    "Collection/Name eq 'SENTINEL-2' and contains(Name,'MSIL2A') and "
+    "OData.CSC.Intersects(area=geography'SRID=4326;POINT(77.61 28.17)')"
+)
 
 
 def _login_form(html: str) -> tuple[str, dict[str, str]]:
@@ -122,10 +131,105 @@ def dlr() -> bool:
     return True
 
 
+def cdse() -> bool:
+    """CDSE (Sentinel-2), verified live 2026-08-23. Distinguishes the three
+    outcomes O10 warns get confused for each other:
+
+      (a) missing variable    -- credentials.require() raises before any network
+                                  call; the caller's except block reports it and
+                                  names the variable, never a value.
+      (b) present but REJECTED (expired/revoked/wrong key) -- the S3 endpoint
+                                  answers HTTP 403 with an S3-style XML
+                                  <Error><Code>...</Code></Error> body
+                                  (InvalidAccessKeyId / SignatureDoesNotMatch /
+                                  AccessDenied / ExpiredToken all land here).
+                                  O10: a caller-chosen S3 key expiry means this
+                                  looks, from a glance at 'it failed', exactly
+                                  like (c) -- the XML body is what tells them
+                                  apart, not the fact that something failed.
+      (c) genuine service/network problem -- a connection error, timeout, or
+                                  HTTP 5xx from the S3 endpoint itself.
+    """
+    print("  catalogue search (no auth) ...", end=" ", flush=True)
+    r = requests.get(CDSE_CATALOGUE, params={"$filter": CDSE_PROBE_FILTER, "$top": 1,
+                                             "$orderby": "ContentDate/Start desc"},
+                      timeout=60)
+    r.raise_for_status()
+    items = r.json().get("value", [])
+    if not items:
+        print("no products found — cannot probe download leg")
+        return False
+    prod = items[0]
+    s3path = prod["S3Path"].lstrip("/")          # "eodata/Sentinel-2/MSI/L2A/..."
+    key = s3path[len(cdse_s3.BUCKET) + 1:]        # strip the leading "eodata/"
+    print(f"HTTP {r.status_code}  {prod['Name'][:45]}…")
+
+    try:
+        creds = credentials.require("cdse")       # (a) — raises + names the variable
+    except RuntimeError as e:
+        print(f"  FAIL (a) missing variable: {e}")
+        return False
+    del creds  # never touched again; require() above is only to fail fast and clearly
+
+    # Smallest reliably-present file in the product: the manifest.
+    print(f"  S3 GET [manifest.safe] ...", end=" ", flush=True)
+    try:
+        resp = cdse_s3.sigv4_get(f"{key}/manifest.safe")
+    except requests.exceptions.RequestException as e:
+        print(f"FAIL (c) service/network problem: {type(e).__name__}: {e}")
+        return False
+
+    print(f"HTTP {resp.status_code}  {len(resp.content)} B")
+    if resp.status_code in (401, 403):
+        print(f"  FAIL (b) present but REJECTED by the S3 endpoint:")
+        print(f"    {resp.text[:300]}")
+        print("  This is an S3 key problem (expired/revoked/wrong), not a service")
+        print("  outage — regenerate CDSE_S3_ACCESS_KEY/CDSE_S3_SECRET_KEY at")
+        print("  https://eodata-s3keysmanager.dataspace.copernicus.eu/")
+        return False
+    if resp.status_code >= 500:
+        print(f"  FAIL (c) genuine service problem: HTTP {resp.status_code}")
+        return False
+    if resp.status_code != 200:
+        print(f"  FAIL unexpected status {resp.status_code}: {resp.text[:300]}")
+        return False
+    if not resp.content.startswith(b"<?xml"):
+        print("  FAIL — HTTP 200 but payload is not the expected XML manifest "
+              f"(leading bytes {resp.content[:16]!r}) — see core/http_guard.py")
+        return False
+    print("  PASS — real, authenticated S3 bytes. O10 discharged for this key.")
+
+    # Also prove the windowed-raster path (/vsis3/ + rasterio), the one the
+    # fetcher actually uses for band data, not just the small-file GET above.
+    # The granule folder name and band filenames are not derivable from the
+    # product name, so discover them via the unauthenticated OData Nodes
+    # browsing API (verified separately to need no credentials at all) rather
+    # than guessing a path.
+    import rasterio
+
+    prod_id, name = prod["Id"], prod["Name"]
+    nbase = f"{CDSE_CATALOGUE}({prod_id})/Nodes({name})/Nodes(GRANULE)/Nodes"
+    gran = requests.get(nbase, timeout=60).json()["result"][0]["Name"]
+    band_nodes = requests.get(
+        f"{CDSE_CATALOGUE}({prod_id})/Nodes({name})/Nodes(GRANULE)/Nodes({gran})"
+        f"/Nodes(IMG_DATA)/Nodes(R60m)/Nodes", timeout=60).json()["result"]
+    band_file = next(n["Name"] for n in band_nodes if "_B01_" in n["Name"])
+    band_key = f"{key}/GRANULE/{gran}/IMG_DATA/R60m/{band_file}"
+
+    print(f"  /vsis3/ windowed raster open [{band_file}] ...", end=" ", flush=True)
+    with cdse_s3.s3_env():
+        with rasterio.open(cdse_s3.vsis3_path(band_key)) as ds:
+            win = rasterio.windows.Window(0, 0, 16, 16)
+            arr = ds.read(1, window=win)
+    print(f"OK  {ds.width}x{ds.height} {ds.dtypes[0]} {ds.crs}  "
+          f"window read {arr.shape} min/max=[{int(arr.min())},{int(arr.max())}]")
+    return True
+
+
 if __name__ == "__main__":
     st = credentials.status()
     rc = 0
-    for svc, fn in (("dlr", dlr),):
+    for svc, fn in (("dlr", dlr), ("cdse", cdse)):
         if not st.get(svc):
             print(f"{svc}: not configured, skipped"); continue
         print(f"{svc}:")

@@ -1,0 +1,472 @@
+{
+  "products": [
+    {
+      "product_name": "S2A_MSIL2A_20241030T052941_N0511_R105_T43RGM_20241030T093050.SAFE",
+      "stack_file": "S2A_MSIL2A_20241030T052941_N0511_R105_T43RGM_20241030T093050.SAFE_stack.tif",
+      "scl_file": "S2A_MSIL2A_20241030T052941_N0511_R105_T43RGM_20241030T093050.SAFE_scl.tif",
+      "dims_hw": [
+        300,
+        300
+      ],
+      "band_count": 6,
+      "dtypes": [
+        "uint16"
+      ],
+      "band_order": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "band_descriptions": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "gsd_m": 20.0,
+      "nodata": 0.0,
+      "fill_value_source": "ESA convention, NOT a file-read nodata tag (JP2 carries none)",
+      "fill_fraction_per_band": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "wavelengths_nm": [
+        492.7,
+        559.8,
+        664.6,
+        864.7,
+        1613.7,
+        2202.4
+      ],
+      "wavelengths_strictly_ascending": true,
+      "sensing_time": "2024-10-30T05:41:04.025492Z",
+      "product_start_time": "2024-10-30T05:29:41.024Z",
+      "sensing_vs_product_start_differ": true,
+      "processing_baseline": "05.11",
+      "boa_quantification_value": 10000.0,
+      "boa_add_offset_distinct": [
+        -1000.0
+      ],
+      "boa_add_offset_uniform": true,
+      "resampling_note": "none-by-fetcher; B02/B03/B04 20m copies are ESA L2A-processor output, B8A/B11/B12 are 20m-native",
+      "cloud_cover_tile_pct": "2.3e-05",
+      "aoi_clear_fraction_scl_tag": "1.0",
+      "aoi_clear_fraction_recomputed": 1.0,
+      "scl_dims_hw": [
+        300,
+        300
+      ],
+      "scl_dtype": "uint8",
+      "scl_crs": "EPSG:32643",
+      "scl_transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "scl_grid_matches_stack": true,
+      "scl_values_present": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "scl_values_unknown": []
+    },
+    {
+      "product_name": "S2B_MSIL2A_20201016T052819_N0500_R105_T43RGM_20230413T162324.SAFE",
+      "stack_file": "S2B_MSIL2A_20201016T052819_N0500_R105_T43RGM_20230413T162324.SAFE_stack.tif",
+      "scl_file": "S2B_MSIL2A_20201016T052819_N0500_R105_T43RGM_20230413T162324.SAFE_scl.tif",
+      "dims_hw": [
+        300,
+        300
+      ],
+      "band_count": 6,
+      "dtypes": [
+        "uint16"
+      ],
+      "band_order": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "band_descriptions": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "gsd_m": 20.0,
+      "nodata": 0.0,
+      "fill_value_source": "ESA convention, NOT a file-read nodata tag (JP2 carries none)",
+      "fill_fraction_per_band": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "wavelengths_nm": [
+        492.3,
+        559.0,
+        665.0,
+        864.0,
+        1610.4,
+        2185.7
+      ],
+      "wavelengths_strictly_ascending": true,
+      "sensing_time": "2020-10-16T05:41:07.277248Z",
+      "product_start_time": "2020-10-16T05:28:19.024Z",
+      "sensing_vs_product_start_differ": true,
+      "processing_baseline": "05.00",
+      "boa_quantification_value": 10000.0,
+      "boa_add_offset_distinct": [
+        -1000.0
+      ],
+      "boa_add_offset_uniform": true,
+      "resampling_note": "none-by-fetcher; B02/B03/B04 20m copies are ESA L2A-processor output, B8A/B11/B12 are 20m-native",
+      "cloud_cover_tile_pct": "0.0",
+      "aoi_clear_fraction_scl_tag": "1.0",
+      "aoi_clear_fraction_recomputed": 1.0,
+      "scl_dims_hw": [
+        300,
+        300
+      ],
+      "scl_dtype": "uint8",
+      "scl_crs": "EPSG:32643",
+      "scl_transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "scl_grid_matches_stack": true,
+      "scl_values_present": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "scl_values_unknown": []
+    },
+    {
+      "product_name": "S2B_MSIL2A_20220330T052639_N0510_R105_T43RGM_20240522T115955.SAFE",
+      "stack_file": "S2B_MSIL2A_20220330T052639_N0510_R105_T43RGM_20240522T115955.SAFE_stack.tif",
+      "scl_file": "S2B_MSIL2A_20220330T052639_N0510_R105_T43RGM_20240522T115955.SAFE_scl.tif",
+      "dims_hw": [
+        300,
+        300
+      ],
+      "band_count": 6,
+      "dtypes": [
+        "uint16"
+      ],
+      "band_order": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "band_descriptions": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "gsd_m": 20.0,
+      "nodata": 0.0,
+      "fill_value_source": "ESA convention, NOT a file-read nodata tag (JP2 carries none)",
+      "fill_fraction_per_band": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "wavelengths_nm": [
+        492.3,
+        559.0,
+        665.0,
+        864.0,
+        1610.4,
+        2185.7
+      ],
+      "wavelengths_strictly_ascending": true,
+      "sensing_time": "2022-03-30T05:41:00.266099Z",
+      "product_start_time": "2022-03-30T05:26:39.024Z",
+      "sensing_vs_product_start_differ": true,
+      "processing_baseline": "05.10",
+      "boa_quantification_value": 10000.0,
+      "boa_add_offset_distinct": [
+        -1000.0
+      ],
+      "boa_add_offset_uniform": true,
+      "resampling_note": "none-by-fetcher; B02/B03/B04 20m copies are ESA L2A-processor output, B8A/B11/B12 are 20m-native",
+      "cloud_cover_tile_pct": "0.0",
+      "aoi_clear_fraction_scl_tag": "1.0",
+      "aoi_clear_fraction_recomputed": 1.0,
+      "scl_dims_hw": [
+        300,
+        300
+      ],
+      "scl_dtype": "uint8",
+      "scl_crs": "EPSG:32643",
+      "scl_transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "scl_grid_matches_stack": true,
+      "scl_values_present": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "scl_values_unknown": []
+    },
+    {
+      "product_name": "S2B_MSIL2A_20260617T052649_N0512_R105_T43RGM_20260617T104156.SAFE",
+      "stack_file": "S2B_MSIL2A_20260617T052649_N0512_R105_T43RGM_20260617T104156.SAFE_stack.tif",
+      "scl_file": "S2B_MSIL2A_20260617T052649_N0512_R105_T43RGM_20260617T104156.SAFE_scl.tif",
+      "dims_hw": [
+        300,
+        300
+      ],
+      "band_count": 6,
+      "dtypes": [
+        "uint16"
+      ],
+      "band_order": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "band_descriptions": [
+        "B02",
+        "B03",
+        "B04",
+        "B8A",
+        "B11",
+        "B12"
+      ],
+      "crs": "EPSG:32643",
+      "transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "gsd_m": 20.0,
+      "nodata": 0.0,
+      "fill_value_source": "ESA convention, NOT a file-read nodata tag (JP2 carries none)",
+      "fill_fraction_per_band": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "wavelengths_nm": [
+        492.3,
+        559.0,
+        665.0,
+        864.0,
+        1610.4,
+        2185.7
+      ],
+      "wavelengths_strictly_ascending": true,
+      "sensing_time": "2026-06-17T05:41:01.854886Z",
+      "product_start_time": "2026-06-17T05:26:49.024Z",
+      "sensing_vs_product_start_differ": true,
+      "processing_baseline": "05.12",
+      "boa_quantification_value": 10000.0,
+      "boa_add_offset_distinct": [
+        -1000.0
+      ],
+      "boa_add_offset_uniform": true,
+      "resampling_note": "none-by-fetcher; B02/B03/B04 20m copies are ESA L2A-processor output, B8A/B11/B12 are 20m-native",
+      "cloud_cover_tile_pct": "0.0",
+      "aoi_clear_fraction_scl_tag": "1.0",
+      "aoi_clear_fraction_recomputed": 1.0,
+      "scl_dims_hw": [
+        300,
+        300
+      ],
+      "scl_dtype": "uint8",
+      "scl_crs": "EPSG:32643",
+      "scl_transform": [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ],
+      "scl_grid_matches_stack": true,
+      "scl_values_present": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "scl_values_unknown": []
+    }
+  ],
+  "n_products": 4,
+  "cross_product": {
+    "crs_uniform": true,
+    "crs_values": [
+      "EPSG:32643"
+    ],
+    "transform_uniform": true,
+    "transform_values": [
+      [
+        20.0,
+        0.0,
+        753260.0,
+        0.0,
+        -20.0,
+        3121800.0
+      ]
+    ],
+    "wavelengths_uniform": false,
+    "gsd_uniform": true,
+    "gsds": [
+      20.0
+    ]
+  },
+  "remote_claim_check": {
+    "skipped": false,
+    "product_name": "S2B_MSIL2A_20201016T052819_N0500_R105_T43RGM_20230413T162324.SAFE",
+    "n_spectral_bands_in_metadata": 13,
+    "resolutions_present_m": [
+      10.0,
+      20.0,
+      60.0
+    ],
+    "bands_by_resolution": {
+      "10.0": [
+        "B02",
+        "B03",
+        "B04",
+        "B08"
+      ],
+      "20.0": [
+        "B05",
+        "B06",
+        "B07",
+        "B11",
+        "B12",
+        "B8A"
+      ],
+      "60.0": [
+        "B01",
+        "B09",
+        "B10"
+      ]
+    },
+    "delivered_spectral_bands": [
+      "B01",
+      "B02",
+      "B03",
+      "B04",
+      "B05",
+      "B06",
+      "B07",
+      "B08",
+      "B09",
+      "B11",
+      "B12",
+      "B8A"
+    ],
+    "n_delivered_spectral_bands": 12,
+    "delivered_non_spectral_layers": [
+      "AOT",
+      "SCL",
+      "TCI",
+      "WVP"
+    ],
+    "defined_but_not_delivered": [
+      "B10"
+    ],
+    "plan_claim_13_bands": {
+      "claim": "~13 bands multispectral",
+      "metadata_defines_n_bands": 13,
+      "claim_true_for_metadata_definition": true,
+      "but_l2a_delivers_imagery_for": "12 spectral bands (['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B09', 'B11', 'B12', 'B8A']) -- ['B10'] defined in metadata but shipped as no image file in any resolution folder (cirrus is not a surface quantity, dropped by the L2A processor) -- plus non-spectral auxiliary layers ['AOT', 'SCL', 'TCI', 'WVP']"
+    },
+    "plan_claim_resolution_mixing": {
+      "claim": "10/20/60 m resolution mixing; Level 3 code must not assume one grid",
+      "true_at_sensor_level": true,
+      "true_for_landcover_index_bands": false,
+      "why_false_for_landcover": "the landcover profile's 6 bands (B02/B03/B04/B8A/B11/B12) are ALL available pre-resampled to a single 20 m grid by ESA's own L2A processor -- verified: R20m/ ships a copy of every one of them. This project's fetcher reads only those 20 m copies, so Level 3 code built on this fetcher's output needs no on-the-fly resampling at all, contrary to the plan's blanket statement. A different index set needing B08 (10 m-only) or B01/B09 (60 m-only, no 20 m copy) would still need real resampling."
+    },
+    "boa_quantification_value": 10000.0,
+    "boa_add_offset_distinct": [
+      -1000.0
+    ],
+    "boa_add_offset_uniform": true,
+    "processing_baseline": "05.00"
+  }
+}

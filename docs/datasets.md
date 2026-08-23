@@ -98,6 +98,51 @@ for two days. Re-derive with `scripts/verify_enmap.py`; writes `docs/enmap_verif
 - Phase 5 Level 2 ran on one product (a real, georeferenced windowed crop of it — PLAN.md D32);
   the human QGIS-against-basemap step is pending.
 
+### Sentinel-2 L2A — `data/raw/sentinel2/jewar_airport/`
+
+Copernicus Data Space Ecosystem, `eodata` S3 bucket (`https://eodata.dataspace.copernicus.eu`) —
+access verified live 2026-08-23 (`scripts/verify_access.py::cdse`), 4 products opened
+(`scripts/verify_sentinel2.py` → `docs/sentinel2_verified.json`). Site rationale in
+`docs/validation.md` (O5).
+
+- **Plan claim "~13 bands multispectral" is TRUE for the metadata definition** (13
+  `<Spectral_Information>` entries, bandId 0–12, re-confirmed from a fresh `MTD_MSIL2A.xml` read)
+  **but the L2A product actually delivers imagery for 12 bands** — B10 (cirrus, 1376.9 nm) has no
+  image file in L2A at all; atmospheric correction removes it as a surface quantity. SCL/AOT/WVP/
+  TCI are additional non-spectral auxiliary layers, not counted in either number.
+- **Plan claim "10/20/60 m resolution mixing, must not assume one grid" is TRUE at the sensor
+  level** (confirmed per-band from `<RESOLUTION>`: B02/B03/B04/B08 = 10 m, B05/B06/B07/B8A/B11/B12
+  = 20 m, B01/B09/B10 = 60 m) **but FALSE for the `landcover` profile's actual band set** — all 6
+  bands it needs (B02/B03/B04/B8A/B11/B12) ship pre-resampled to a single 20 m grid by ESA's own
+  L2A processor, so this project's fetcher performs **zero on-the-fly resampling**. A different
+  index set needing B08 (10 m-only) or B01/B09 (60 m-only) would still need real resampling.
+- NIR for the landcover indices is **B8A** (864 nm nominal), not B08 — B08 has no 20 m copy.
+- **`BOA_ADD_OFFSET` = -1000, uniform across all 13 metadata bands, on every one of 4 products
+  checked; `BOA_QUANTIFICATION_VALUE` = 10000**, also uniform — both read from each product's own
+  `MTD_MSIL2A.xml`, never assumed, despite the 4 products spanning 4 different processing
+  baselines (05.00/05.10/05.11/05.12).
+- `meta.acquired` source is `MTD_TL.xml`'s per-tile `SENSING_TIME`, **not**
+  `MTD_MSIL2A.xml`'s `PRODUCT_START_TIME`/`DATATAKE_SENSING_START` (the whole datatake/strip's
+  start) — measured to differ from the tile's own sensing time by ~12–14 minutes on every product
+  checked. Using the datatake-level field would have been wrong, not just imprecise.
+- Wavelength centres are **not constant across S2A/B/C**: e.g. B12 centre measured at 2202.4 nm
+  (S2A) vs 2185.7 nm (S2B) on the same tile — read per-product from each `MTD_MSIL2A.xml`, never
+  hardcoded.
+- CRS/transform (pixel grid) is **byte-identical across all 4 dates fetched** (fixed MGRS tile
+  grid, EPSG:32643) — confirmed, not assumed; no co-registration needed for this AOI/tile before
+  `TemporalBaseline`.
+- SCL band present at 20 m, values found restricted to the documented ESA PSD-15 class codes
+  (0–11); AOI clear fraction recomputed independently from SCL (not just trusted from the
+  fetcher's own tag) = **1.000 on all 4 dates used**.
+- Cube dtype as fetched: **uint16, raw digital numbers — the offset/quantification above are
+  recorded on every file but NOT applied**, matching the EnMAP convention (PLAN.md D32): a
+  consumer must apply `(DN + BOA_ADD_OFFSET) / BOA_QUANTIFICATION_VALUE` before computing any
+  reflectance-based index.
+- Total local bytes for the 4-date, 6-band + SCL, 6×6 km AOI fetch: **4,701,576 B (~4.5 MB)** —
+  see `scripts/fetch_sentinel2.py`'s docstring for the measured network-vs-local relationship
+  (windowed JP2 reads via GDAL `/vsis3/`, not whole-tile downloads).
+- **Still documentation-only:** licence/redistribution terms were not checked here.
+
 ---
 
 ## DOCUMENTED ONLY — nothing opened yet, treat every number as provisional
@@ -108,7 +153,6 @@ the same as "verified" — HAD100 sat in this tier for one draft.
 
 | Dataset | Claimed | Needs checking |
 |---|---|---|
-| Sentinel-2 L2A | ~13 bands multispectral, Copernicus Data Space | band subset per product, resolution mixing (10/20/60 m), Phase 5 Level 3 only |
 | AVIRIS / AVIRIS-NG flightlines | 224 / 425 bands, NASA open portal | per-flightline band count and wavelength file availability |
 | USGS splib07 | `doi:10.5066/F7RR1WDJ`, plus ECOSTRESS/ASTER | record format, resampling convention, wavelength grid, licence terms |
 

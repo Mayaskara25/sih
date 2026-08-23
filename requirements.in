@@ -1,5 +1,5 @@
 numpy
-scipy
+scipy==1.18.0
 scikit-learn
 rasterio
 geopandas
@@ -19,6 +19,7 @@ qiskit-machine-learning
 h5py
 pyyaml
 tqdm
+requests
 pandas
 psutil
 spectral

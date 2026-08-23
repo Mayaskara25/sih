@@ -6,9 +6,13 @@
 .tif  -> rasterio; real CRS/transform read from the file, meta.georef == "real".
          An EnMAP L2A product (source="enmap", filename ending
          "-SPECTRAL_IMAGE_COG.TIF") is dispatched to the same path PLUS a
-         METADATA.XML sidecar parse for wavelengths -- see below. Any other
-         .tif (including every existing fixture/test) is unaffected: the
-         sidecar lookup only fires on that exact filename suffix.
+         METADATA.XML sidecar parse for wavelengths -- see below. A Sentinel-2
+         AOI stack (source="sentinel2", filename ending "_stack.tif", written
+         by scripts/fetch_sentinel2.py) is dispatched to the same path PLUS a
+         GDAL-tag parse for wavelengths/acquired -- see
+         `_load_sentinel2_tags`, no sidecar file involved. Any other .tif
+         (including every existing fixture/test) is unaffected: both lookups
+         only fire on their exact (source, filename suffix) combination.
 .hdr  -> spectral.envi for the cube + wavelengths; GDAL's ENVI driver (via
          rasterio, opened on the sibling data file) for CRS/transform/nodata,
          so meta.georef == "real" (D11.5 -- HAD100 ENVI scenes are genuinely
@@ -182,6 +186,53 @@ def _load_enmap_wavelengths(metadata_path: Path) -> tuple[np.ndarray, str | None
     return wavelengths, acquired
 
 
+_S2_STACK_SUFFIX = "_stack.tif"
+
+
+def _load_sentinel2_tags(tags: dict, band_count: int) -> tuple[np.ndarray, str]:
+    """Parse the WAVELENGTHS_NM / SENSING_TIME GDAL tags that
+    `scripts/fetch_sentinel2.py` bakes into every `*_stack.tif` it writes.
+
+    Unlike EnMAP, Sentinel-2 has no sidecar file to parse here: the fetcher
+    already read MTD_MSIL2A.xml (per-product Spectral_Information -- centre
+    wavelength varies by S2A/S2B/S2C platform, verified 2026-08-23: S2A's
+    B12 centre is 2202.4 nm vs S2B's 2185.7 nm on the same tile) and
+    MTD_TL.xml (per-tile SENSING_TIME, the correct acquisition-time source --
+    NOT MTD_MSIL2A.xml's PRODUCT_START_TIME, which is the whole DATATAKE's
+    start and was measured to differ from SENSING_TIME by ~12-14 minutes) at
+    download time, and recorded both directly as tags on the GeoTIFF -- the
+    same mechanism `save_score_raster` already uses for its own tags.
+
+    Strict by construction, mirroring `_load_enmap_wavelengths` (D32): a
+    missing tag, a band-count mismatch, or a non-finite/non-ascending
+    wavelength axis all raise rather than silently returning None. D33 was
+    exactly the bug a silently-empty `acquired` field caused; this must not
+    reintroduce it for the one branch (Phase 5 Level 3) where `acquired`
+    is load-bearing for every downstream comparison.
+    """
+    wl_text = tags.get("WAVELENGTHS_NM")
+    if not wl_text:
+        raise ValueError(
+            "no WAVELENGTHS_NM tag -- not a *_stack.tif written by "
+            "scripts/fetch_sentinel2.py, or the tag was stripped")
+    wavelengths = np.array([float(x) for x in wl_text.split(",")], dtype=np.float32)
+    if wavelengths.shape != (band_count,):
+        raise ValueError(
+            f"WAVELENGTHS_NM tag has {wavelengths.shape[0]} values, cube has "
+            f"{band_count} bands -- refusing to attach a mismatched wavelength array")
+    if not np.all(np.isfinite(wavelengths)):
+        raise ValueError("WAVELENGTHS_NM tag contains non-finite values")
+    if not np.all(np.diff(wavelengths) > 0):
+        raise ValueError("WAVELENGTHS_NM tag is not strictly ascending")
+
+    acquired = tags.get("SENSING_TIME")
+    if not acquired:
+        raise ValueError(
+            "no SENSING_TIME tag -- meta.acquired would be None, reintroducing "
+            "D33 for the one branch (Level 3) where it is load-bearing")
+    return wavelengths, acquired
+
+
 def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
     with rasterio.open(path) as ds:
         raw = ds.read()                              # [B, H, W]
@@ -190,6 +241,7 @@ def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
         if ds.nodata is not None:
             cube = np.where(cube == np.float32(ds.nodata), np.nan, cube)
         crs, transform = ds.crs, ds.transform
+        tags = ds.tags()          # cheap; only used by the sentinel2 branch below
     b = cube.shape[-1]
 
     # A band that is nodata for EVERY pixel in the scene carries zero
@@ -217,6 +269,8 @@ def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
             raise ValueError(
                 f"{path}: METADATA.XML sidecar has {wavelengths.shape[0]} bands, "
                 f"cube has {b} -- refusing to attach a mismatched wavelength array")
+    elif source == "sentinel2" and path.name.endswith(_S2_STACK_SUFFIX):
+        wavelengths, acquired = _load_sentinel2_tags(tags, b)
 
     meta = SceneMeta(
         scene_id=path.stem,
@@ -292,6 +346,29 @@ def load_scene(path: str | Path, *, source: str) -> tuple[np.ndarray, SceneMeta]
     if ext == ".hdr":
         return _load_envi(path, source=source)
     raise ValueError(f"unhandled extension {ext!r} for {path}")
+
+
+def load_sentinel2_scl(stack_path: str | Path) -> np.ndarray:
+    """Load the SCL sibling of a Sentinel-2 `*_stack.tif` written by
+    `scripts/fetch_sentinel2.py` (`*_scl.tif`, same AOI window and grid --
+    verified byte-for-byte same transform/CRS as the stack by
+    `scripts/verify_sentinel2.py`'s `scl_grid_matches_stack` check).
+
+    Returns uint8 [H,W], native SCL class values (0-11, ESA PSD-15) -- for
+    `preprocessing.cloud_mask.cloud_shadow_mask`'s `scl=` argument. That
+    function REQUIRES an SCL array whenever `meta.source == "sentinel2"` and
+    raises rather than falling back to spectral thresholds tuned for
+    hyperspectral sensors (PLAN.md §3C.7) -- SCL is not baked into the cube
+    `load_scene` returns, so callers must load it separately with this
+    function rather than slicing a 7th band off the cube.
+    """
+    stack_path = Path(stack_path)
+    scl_path = stack_path.with_name(stack_path.name.replace("_stack.tif", "_scl.tif"))
+    if not scl_path.exists():
+        raise FileNotFoundError(f"{stack_path}: no matching SCL file {scl_path.name}")
+    with rasterio.open(scl_path) as ds:
+        scl = ds.read(1)
+    return scl.astype(np.uint8)
 
 
 def save_score_raster(score: np.ndarray, meta: SceneMeta, out_path: str | Path,
