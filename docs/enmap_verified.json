@@ -1,6 +1,614 @@
 {
   "scenes": [
     {
+      "scene_id": "ENMAP01-____L2A-DT0000191114_20260429T064450Z_001_V010506_20260429T231017Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000191114_20260429T064450Z_001_V010506_20260429T231017Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000191114_20260429T064450Z_001_V010506_20260429T231017Z-METADATA.XML",
+      "dims_hw": [
+        1178,
+        1229
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32642",
+      "transform": [
+        30.0,
+        0.0,
+        558855.0,
+        0.0,
+        -30.0,
+        3580725.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 69.62338517321396,
+        "max_lon": 70.01740720562692,
+        "min_lat": 32.043118994709474,
+        "max_lat": 32.35936821980584
+      },
+      "valid_fraction": 0.7123194281933081,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-04-29T06:44:50.018269Z",
+      "acquisition_stop": "2026-04-29T06:44:54.509503Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 3,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 7,
+      "ortho_rmse_x": 3,
+      "ortho_rmse_y": 5,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000191613_20260428T062216Z_022_V010506_20260501T163422Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000191613_20260428T062216Z_022_V010506_20260501T163422Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000191613_20260428T062216Z_022_V010506_20260501T163422Z-METADATA.XML",
+      "dims_hw": [
+        1171,
+        1211
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32643",
+      "transform": [
+        30.0,
+        0.0,
+        234075.0,
+        0.0,
+        -30.0,
+        2469105.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 72.42453425186491,
+        "max_lon": 72.77117846711128,
+        "min_lat": 21.99014365507238,
+        "max_lat": 22.312427804898565
+      },
+      "valid_fraction": 0.7216639952160702,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-04-28T06:22:16.481092Z",
+      "acquisition_stop": "2026-04-28T06:22:20.972289Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 1,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 5,
+      "ortho_rmse_x": 3,
+      "ortho_rmse_y": 4,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000193400_20260517T061544Z_005_V010506_20260518T034253Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000193400_20260517T061544Z_005_V010506_20260518T034253Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000193400_20260517T061544Z_005_V010506_20260518T034253Z-METADATA.XML",
+      "dims_hw": [
+        1163,
+        1209
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32643",
+      "transform": [
+        30.0,
+        0.0,
+        330795.0,
+        0.0,
+        -30.0,
+        2285655.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 73.37902049811085,
+        "max_lon": 73.7238045901991,
+        "min_lat": 20.347465383688178,
+        "max_lat": 20.66553730652255
+      },
+      "valid_fraction": 0.7317674051094294,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-05-17T06:15:44.731925Z",
+      "acquisition_stop": "2026-05-17T06:15:49.223143Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 1,
+      "cirrus_cover_pct": 1,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 3,
+      "ortho_rmse_x": 1,
+      "ortho_rmse_y": 2,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000193412_20260517T061331Z_003_V010506_20260518T025901Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000193412_20260517T061331Z_003_V010506_20260518T025901Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000193412_20260517T061331Z_003_V010506_20260518T025901Z-METADATA.XML",
+      "dims_hw": [
+        1166,
+        1239
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32643",
+      "transform": [
+        30.0,
+        0.0,
+        694275.0,
+        0.0,
+        -30.0,
+        3158115.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 76.97970723899597,
+        "max_lon": 77.36522733042985,
+        "min_lat": 28.219767508192525,
+        "max_lat": 28.52925177936129
+      },
+      "valid_fraction": 0.7377671363920165,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-05-17T06:13:31.827944Z",
+      "acquisition_stop": "2026-05-17T06:13:36.319163Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 5,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 7,
+      "ortho_rmse_x": 5,
+      "ortho_rmse_y": 4,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000194619_20260525T062118Z_003_V010506_20260526T151105Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000194619_20260525T062118Z_003_V010506_20260526T151105Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000194619_20260525T062118Z_003_V010506_20260526T151105Z-METADATA.XML",
+      "dims_hw": [
+        1172,
+        1217
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32643",
+      "transform": [
+        30.0,
+        0.0,
+        402765.0,
+        0.0,
+        -30.0,
+        2960385.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 74.02473774631251,
+        "max_lon": 74.38922608864088,
+        "min_lat": 26.444008169628546,
+        "max_lat": 26.76348299361486
+      },
+      "valid_fraction": 0.7226226299213924,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-05-25T06:21:18.850825Z",
+      "acquisition_stop": "2026-05-25T06:21:23.342004Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 2,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 3,
+      "ortho_rmse_x": 2,
+      "ortho_rmse_y": 2,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000194966_20260516T055056Z_020_V010506_20260519T013711Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000194966_20260516T055056Z_020_V010506_20260519T013711Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000194966_20260516T055056Z_020_V010506_20260519T013711Z-METADATA.XML",
+      "dims_hw": [
+        1171,
+        1202
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32644",
+      "transform": [
+        30.0,
+        0.0,
+        368175.0,
+        0.0,
+        -30.0,
+        2062125.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 79.7525023547763,
+        "max_lon": 80.09204034084874,
+        "min_lat": 18.328622292434353,
+        "max_lat": 18.648019843481624
+      },
+      "valid_fraction": 0.7334260718330252,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-05-16T05:50:56.566658Z",
+      "acquisition_stop": "2026-05-16T05:51:01.101331Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 3,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 5,
+      "ortho_rmse_x": 3,
+      "ortho_rmse_y": 4,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000196445_20260526T064638Z_013_V010506_20260529T135937Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000196445_20260526T064638Z_013_V010506_20260529T135937Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000196445_20260526T064638Z_013_V010506_20260529T135937Z-METADATA.XML",
+      "dims_hw": [
+        1184,
+        1221
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32642",
+      "transform": [
+        30.0,
+        0.0,
+        365775.0,
+        0.0,
+        -30.0,
+        2962425.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 67.65362432102108,
+        "max_lon": 68.0182636725494,
+        "min_lat": 26.456160375437136,
+        "max_lat": 26.779816274279565
+      },
+      "valid_fraction": 0.7195129712021604,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-05-26T06:46:38.358708Z",
+      "acquisition_stop": "2026-05-26T06:46:42.893409Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 1,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 9,
+      "ortho_rmse_x": 6,
+      "ortho_rmse_y": 6,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
+      "scene_id": "ENMAP01-____L2A-DT0000199106_20260610T063602Z_013_V010506_20260613T025404Z",
+      "spectral_file": "ENMAP01-____L2A-DT0000199106_20260610T063602Z_013_V010506_20260613T025404Z-SPECTRAL_IMAGE_COG.TIF",
+      "metadata_file": "ENMAP01-____L2A-DT0000199106_20260610T063602Z_013_V010506_20260613T025404Z-METADATA.XML",
+      "dims_hw": [
+        1170,
+        1200
+      ],
+      "band_count": 224,
+      "dtype": "int16",
+      "crs": "EPSG:32642",
+      "transform": [
+        30.0,
+        0.0,
+        518115.0,
+        0.0,
+        -30.0,
+        2822535.0
+      ],
+      "gsd_m": 30.0,
+      "nodata": -32768.0,
+      "wgs84_bounds": {
+        "min_lon": 69.17981325293073,
+        "max_lon": 69.53855108889485,
+        "min_lat": 25.202972363675983,
+        "max_lat": 25.519068065728256
+      },
+      "valid_fraction": 0.7393938746438746,
+      "fully_nodata_bands_decimated": [
+        131,
+        132,
+        133,
+        134,
+        135
+      ],
+      "n_fully_nodata_bands": 5,
+      "wavelength_count": 224,
+      "wavelength_min_nm": 418.416,
+      "wavelength_max_nm": 2445.3,
+      "wavelength_strictly_ascending": true,
+      "wavelength_all_finite": true,
+      "wavelength_median_step_nm": 7.980000000000018,
+      "wavelength_sha256": "1cc743cf7cc3a3ce67e6cf93d1a69e07ef0ed1854e44a9d5a9ceed68e9b80399",
+      "gain_of_band_distinct": [
+        0.0001
+      ],
+      "gain_of_band_uniform": true,
+      "offset_of_band_distinct": [
+        0.0
+      ],
+      "offset_of_band_uniform": true,
+      "acquisition_start": "2026-06-10T06:36:02.396061Z",
+      "acquisition_stop": "2026-06-10T06:36:06.930777Z",
+      "cloud_cover_pct": 0,
+      "haze_cover_pct": 4,
+      "cirrus_cover_pct": 0,
+      "snow_cover_pct": 0,
+      "ortho_rmse": 4,
+      "ortho_rmse_x": 2,
+      "ortho_rmse_y": 3,
+      "ortho_rmse_unit_in_xml": "NOT PRESENT -- no unit attribute on this element; reported as a raw number, unit unverified from the file",
+      "swir_selected": "SWIRA",
+      "metadata_background_value": -32768,
+      "harmonize_coverage_ok": false,
+      "harmonize_n_canonical_bands_uncovered": 8,
+      "harmonize_uncovered_wavelengths_nm": [
+        400.0,
+        410.0,
+        1790.0,
+        2460.0,
+        2470.0,
+        2480.0,
+        2490.0,
+        2500.0
+      ]
+    },
+    {
       "scene_id": "ENMAP01-____L2A-DT0000201483_20260618T064125Z_021_V010506_20260621T054152Z",
       "spectral_file": "ENMAP01-____L2A-DT0000201483_20260618T064125Z_021_V010506_20260621T054152Z-SPECTRAL_IMAGE_COG.TIF",
       "metadata_file": "ENMAP01-____L2A-DT0000201483_20260618T064125Z_021_V010506_20260621T054152Z-METADATA.XML",
@@ -913,7 +1521,7 @@
       ]
     }
   ],
-  "n_scenes": 12,
+  "n_scenes": 20,
   "cross_scene": {
     "band_count_uniform": true,
     "band_counts": [
@@ -951,7 +1559,7 @@
     "swir_selected_values": [
       "SWIRA"
     ],
-    "mean_valid_fraction": 0.7380805088137347,
+    "mean_valid_fraction": 0.7337719809138046,
     "min_valid_fraction": 0.6973140495867769,
     "max_valid_fraction": 0.7669652200411678,
     "fully_nodata_bands_uniform_across_scenes": true,
