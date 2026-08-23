@@ -112,18 +112,31 @@ def _package_versions() -> dict[str, str]:
 
 def run_pipeline(*, scene: Path, source: str, detector: str, threshold_pct: float,
                   profile: str, out_dir: Path, normalize_method: str = "standardize",
-                  detector_params: dict | None = None) -> dict:
+                  detector_params: dict | None = None,
+                  window: tuple[int, int, int, int] | None = None,
+                  progress_fn=None, log_fn=None) -> dict:
+    # `window`/`progress_fn`/`log_fn` serve the desktop UI (D35, docs/ui_plan.md).
+    # `window` bounds GeoTIFF reads to a sub-window with a real window_transform
+    # -- the D35 OOM guard; None keeps the historical whole-scene behaviour.
+    # The callbacks are optional and no-op by default, so every existing CLI
+    # and benchmark caller is unaffected.
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     timings: dict[str, float] = {}
 
     def stage(name, fn, *args, **kwargs):
+        if log_fn:
+            log_fn(f"[{name}] running ...")
         t0 = time.perf_counter()
         result = fn(*args, **kwargs)
         timings[name] = time.perf_counter() - t0
+        if log_fn:
+            log_fn(f"[{name}] done in {timings[name]:.2f}s")
+        if progress_fn:
+            progress_fn(len(timings), name)
         return result
 
-    cube, meta = stage("load", load_scene, scene, source=source)
+    cube, meta = stage("load", load_scene, scene, source=source, window=window)
     cube, meta = stage("drop_bad_bands", drop_bad_bands, cube, meta)
     norm_cube = stage("standardize", NORMALIZERS[normalize_method], cube)
     validate_scene(norm_cube, meta)
@@ -171,8 +184,15 @@ def run_pipeline(*, scene: Path, source: str, detector: str, threshold_pct: floa
         scene=str(scene), source=source, detector=detector, threshold_pct=threshold_pct,
         profile=profile, normalize_method=normalize_method,
         detector_params=detector_params or {},
+        window=list(window) if window is not None else None,
         git_sha=_git_sha(), package_versions=_package_versions(),
         timings_s=timings, n_rois=len(rois),
+        # Per-ROI pixel bboxes + scores so UI consumers (preview overlay,
+        # coordinates.xlsx export) can key into the GeoJSON by roi_id without
+        # re-deriving connected components from the mask (D35: preview and
+        # xlsx both derive from what the run wrote).
+        rois=[dict(roi_id=r.roi_id, bbox=list(r.bbox), anomaly_score=r.anomaly_score)
+              for r in rois],
         outputs=dict(anom_raw=str(raw_path), anom_norm=str(norm_path),
                      mask=str(mask_path), geojson=str(geojson_path)),
     )
@@ -191,6 +211,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--profile", default="object", choices=["object", "landcover"])
     p.add_argument("--normalize-method", default="standardize", choices=sorted(NORMALIZERS))
     p.add_argument("--out", required=True, type=Path)
+    p.add_argument("--window", default=None,
+                   help="row_off,col_off,height,width -- read a GeoTIFF sub-window "
+                        "instead of the whole scene (D35 OOM guard)")
     args = p.parse_args(argv)
 
     manifest = run_pipeline(
@@ -198,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         threshold_pct=args.threshold_pct, profile=args.profile,
         out_dir=args.out, normalize_method=args.normalize_method,
         detector_params=json.loads(args.detector_params) if args.detector_params else None,
+        window=tuple(int(v) for v in args.window.split(",")) if args.window else None,
     )
     print(json.dumps(manifest, indent=2))
     return 0

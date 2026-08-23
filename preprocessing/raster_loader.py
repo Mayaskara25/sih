@@ -233,14 +233,31 @@ def _load_sentinel2_tags(tags: dict, band_count: int) -> tuple[np.ndarray, str]:
     return wavelengths, acquired
 
 
-def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
+def _load_tif(path: Path, *, source: str,
+              window: tuple[int, int, int, int] | None = None) -> tuple[np.ndarray, SceneMeta]:
+    # `window` = (row_off, col_off, height, width), read through
+    # rasterio.windows so the transform stays REAL georeferencing
+    # (ds.window_transform) rather than a re-derived affine -- D35's OOM
+    # guard. A full EnMAP scene as float32 is ~1.3 GB and the pipeline makes
+    # several copies (kernel OOM at 8.7 GB RSS on a 13 GB no-swap machine);
+    # a bounded window keeps the UI usable on such scenes.
     with rasterio.open(path) as ds:
-        raw = ds.read()                              # [B, H, W]
+        if window is not None:
+            r0, c0, h, w = (int(v) for v in window)
+            if r0 < 0 or c0 < 0 or h <= 0 or w <= 0 or r0 + h > ds.height or c0 + w > ds.width:
+                raise ValueError(
+                    f"{path}: window {(r0, c0, h, w)} does not fit raster "
+                    f"({ds.height}, {ds.width})")
+            win = rasterio.windows.Window(col_off=c0, row_off=r0, width=w, height=h)
+            raw = ds.read(window=win)                # [B, h, w]
+            crs, transform = ds.crs, ds.window_transform(win)
+        else:
+            raw = ds.read()                          # [B, H, W]
+            crs, transform = ds.crs, ds.transform
         cube = cast_to_float32(raw, source_dtype=raw.dtype)
         cube = np.ascontiguousarray(np.moveaxis(cube, 0, -1))   # -> [H, W, B]
         if ds.nodata is not None:
             cube = np.where(cube == np.float32(ds.nodata), np.nan, cube)
-        crs, transform = ds.crs, ds.transform
         tags = ds.tags()          # cheap; only used by the sentinel2 branch below
     b = cube.shape[-1]
 
@@ -272,8 +289,13 @@ def _load_tif(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
     elif source == "sentinel2" and path.name.endswith(_S2_STACK_SUFFIX):
         wavelengths, acquired = _load_sentinel2_tags(tags, b)
 
+    scene_id = path.stem
+    if window is not None:
+        r0, c0, h, w = (int(v) for v in window)
+        scene_id = f"{scene_id}_win_{r0}_{c0}_{h}x{w}"
+
     meta = SceneMeta(
-        scene_id=path.stem,
+        scene_id=scene_id,
         crs=crs,
         transform=transform,
         wavelengths=wavelengths,
@@ -330,20 +352,31 @@ def _load_envi(path: Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
     return cube, meta
 
 
-def load_scene(path: str | Path, *, source: str) -> tuple[np.ndarray, SceneMeta]:
+def load_scene(path: str | Path, *, source: str,
+               window: tuple[int, int, int, int] | None = None
+               ) -> tuple[np.ndarray, SceneMeta]:
     """Dispatch on extension. Returns C1-compliant (cube [H,W,B] float32, meta).
 
     DTYPE IS READ, NEVER ASSUMED -- meta records nothing about source dtype
     directly (that lives in the raw array before cast_to_float32 runs); the
     cast itself refuses to guess.
+
+    `window` = (row_off, col_off, height, width) bounds a GeoTIFF read to a
+    sub-window with a real window_transform (D35's OOM guard). Only the .tif
+    path supports it; .mat/.hdr scenes are small enough not to need it and
+    raise rather than silently ignoring it.
     """
     path = Path(path)
     ext = path.suffix.lower()
     if ext == ".mat":
+        if window is not None:
+            raise ValueError("window is only supported for GeoTIFF scenes")
         return _load_mat(path, source=source)
     if ext in (".tif", ".tiff"):
-        return _load_tif(path, source=source)
+        return _load_tif(path, source=source, window=window)
     if ext == ".hdr":
+        if window is not None:
+            raise ValueError("window is only supported for GeoTIFF scenes")
         return _load_envi(path, source=source)
     raise ValueError(f"unhandled extension {ext!r} for {path}")
 

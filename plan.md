@@ -2237,6 +2237,29 @@ corrections made before it was cleared for handoff).
    does not exist, no placeholder for hardware results (O1/O2), no EnMAP-only framing now that
    HAD100, ABU, HYDICE and Sentinel-2 are all supported.
 
+**BUILT 2026-08-23, and the OOM guard shipped broken — caught in review, fixed, pinned.** `ui/`
+(app · excel_export · preview, ~630 lines) plus a `window=` option on `load_scene` and optional
+`progress_fn`/`log_fn` callbacks on `run_pipeline` (no-op by default; CLI and benchmark callers
+untouched). The four prohibitions above were checked and hold: `ui/app.py` imports `DETECTORS` and
+`run_pipeline` and contains no detector maths (the only `np.percentile` is a display contrast
+stretch); the spreadsheet is derived from the run's own GeoJSON/mask/manifest and recomputes no
+geometry, carrying a "convenience export" note and `git_sha`; no power or energy figure appears.
+
+**The guard, though, did exactly what this note was written to prevent.** It shipped with a
+*guessed* `COPY_FACTOR = 4.0`, which estimated a full EnMAP scene at **5,189 MB** — under its own
+6,000 MB limit — and therefore **allowed** the precise scene the kernel killed at 8,700 MB (D32).
+It passed its own unit tests while failing its only job. The factor is now derived from the two
+measurements this project actually has (full scene 6.71x, window 3.84x); the larger is taken
+because **the factor grows with scene size, so calibrating on the small case under-predicts the
+large one, and under-prediction is the direction that gets the process killed.** At 6.71 the
+estimate reproduces the measured 8,704 MB and refuses.
+
+`tests/test_ui_memory_guard.py` asserts against **what the kernel actually did** — refuse what was
+killed, allow what completed — rather than against the constant, and was verified to fail (2 of 4)
+when the old factor is restored. This is the D22.2/D28/D33 pattern once more: a check that passed
+for the wrong reason. It is worth noting that it was a *guessed constant beside two measured data
+points already recorded in this plan* — the numbers needed to get it right were sitting in D32.
+
 **One engineering constraint recorded because it has already caused a kernel OOM here.** A full
 EnMAP scene is 1173x1202x224 int16 — ~1.3 GB as a single float32 copy, and the Level 2 run on a
 full scene was killed at **8.7 GB RSS** on a 13 GB machine with no swap (D32). A file picker
