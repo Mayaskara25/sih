@@ -2196,6 +2196,55 @@ than a correction -- the four geotransforms are byte-identical -- and measured r
   is not a defect finding, but the guarantee `docs/edge.md` claims for `StripPipeline` rests on
   that sampling, so it is logged here rather than forgotten.
 
+### D35 — A desktop UI is added to the plan (2026-08-23), scoped deliberately narrow. It is a **thin front-end over `pipeline/run_pipeline.py`**, and it is the first component whose audience is a person rather than a file.
+
+Until now every output of this project has been a file — a GeoJSON, a CSV, a QGIS project — read
+by someone who already knows what it means. A UI is different: it is read by someone who does
+not, and it is therefore the surface on which this project's reporting rules are easiest to
+break by accident. It is recorded here because building it without a decision note would make it
+the only component in the system with no provenance, in a plan whose whole discipline is that
+the spec and the tree agree.
+
+**Placement: P2.** It is not on the critical path — P0 is complete and every result this project
+reports already exists without it. It ranks above the remaining P3 items because a system that
+cannot be shown is harder to defend than one that can, and below anything that would change a
+number. Filesystem-disjoint from everything else: new `ui/` package, one ~5-line callback hook in
+`pipeline/run_pipeline.py`.
+
+**Scope, v1:** pick a scene, choose detector and threshold, run, watch a log and a preview, export
+`coordinates.xlsx`. Anomaly detection only. Segmentation, change detection and edge benchmarks are
+explicitly v2. Full plan: `docs/ui_plan.md` (reviewed 2026-08-23; its §0.1 records four
+corrections made before it was cleared for handoff).
+
+**What the UI may not do — the reason this note exists rather than a ticket:**
+
+1. **It may not fork the science.** The reference implementation (`sih2.py.py`) carries its own
+   RX, PCA, thresholding and region extraction in one file. Reimplementing any of that here would
+   create a second, unvalidated detector path whose numbers could silently diverge from
+   `run_benchmark`'s. The UI calls `run_pipeline` and renders what it returns. Its preview and its
+   spreadsheet both derive from the **GeoJSON that run already wrote**, so the picture and the
+   export cannot disagree with each other or with the record.
+2. **`coordinates.xlsx` is a convenience export, not a contract output.** C6 is frozen at exactly
+   16 properties (§2); a spreadsheet must not present itself as an alternative authority. Its
+   Metadata sheet carries `git_sha` and package versions from the run manifest so any exported
+   file traces back to the run that produced it.
+3. **No unlabelled simulated figure reaches the screen.** §9 and O2 stand: no power or energy
+   number exists or may be displayed, and any edge/latency figure carries its `SIMULATED` label
+   into the UI. The same applies to every number this project has already qualified — a fused AUC
+   that D25 records as *comparable to*, not better than, its best component must not appear in a
+   UI as a headline.
+4. **It may not imply a capability the tree does not have.** No greyed-out tab for a branch that
+   does not exist, no placeholder for hardware results (O1/O2), no EnMAP-only framing now that
+   HAD100, ABU, HYDICE and Sentinel-2 are all supported.
+
+**One engineering constraint recorded because it has already caused a kernel OOM here.** A full
+EnMAP scene is 1173x1202x224 int16 — ~1.3 GB as a single float32 copy, and the Level 2 run on a
+full scene was killed at **8.7 GB RSS** on a 13 GB machine with no swap (D32). A file picker
+pointed at `data/raw/enmap` puts that one click away. v1 must read windowed with a real
+`window_transform` (Level 2's proven workaround: a 600x402 crop ran at 829 MB) or refuse the scene
+with an explanation. **A progress bar that ends in a SIGKILL is worse than a refusal**, and on a
+demo machine in front of judges it is the difference between a limitation and a crash.
+
 ---
 
 ## 2. Frozen Contracts v1.0
@@ -3552,6 +3601,7 @@ interesting one.
 | **P0 — ship this** | finish `3B` (`train_unet` → `infer`) · `local_rx` · `kernel_rx` · `crd` · `streaming_rx` · `fusion` · **Phase 4** · **Phase 5 Level 1** · **Phase 7 `demo.py`** | the critical path plus the benchmark that makes it defensible and the demo that makes it presentable. A working, benchmarked, demoable system. |
 | **P1 — if P0 is done** | ~~`3D`: `profiling` · `constrained_sim` · `roi_pipeline` · `benchmark`~~ (**3D BUILT 2026-08-22, D31**) · **Phase 6 Tier A** | edge story; simulated only, and §9 forbids reporting power |
 | **P2 — genuinely optional** | ~~`3C`: `registration` · `spectral_angle` · `physics_fusion` · `siamese_net`~~ (**3C BUILT 2026-08-22, D30**) — and ~~`3E`: the whole quantum arm~~ (**3E BUILT 2026-08-22, D27**) | research breadth. Phase 7 step 11 shows quantum "as a research branch"; a missing branch is a smaller loss than a broken P0. |
+| **P2 — genuinely optional** (cont.) | **UI** — desktop front-end over `run_pipeline` (**added 2026-08-23, D35**; plan in `docs/ui_plan.md`) | presentation, not correctness. Ranks above P3 because a system that cannot be shown is harder to defend; below anything that would change a number. |
 | **P3 — deferred, do not start** | `train_alt_arch` · `deep_detector` · `autoencoder` · `quantization` · `onnx_inference` (**`quantization` and `onnx_inference` were built anyway, as part of 3D, 2026-08-22, D31** — a divergence between this designation and the tree, recorded here rather than silently left) | architecture comparison and deployment polish. Valuable, not load-bearing. |
 | **BLOCKED — never start** | Phase 6 **Tier B** | no instrumented hardware exists (§0.2, §9). Not a scheduling choice. |
 
@@ -3603,9 +3653,9 @@ check remains a human step and **Level 3 is not marked accepted**.
 **So what actually remains.** Nothing in P0–P2 is unbuilt. The open items are (1) the human QGIS
 pass on Level 3, (2) the permanently-blocked hardware items — Phase 6 Tier B (O2, no Pi) and 3E.7
 (O1, no IBM Quantum account), (3) whether the EnMAP **download leg** works today, which O11 leaves
-explicitly untested and which now affects only *acquiring more* scenes, and (4) a UI, which
-appears nowhere in this plan and would need its own placement before being built
-(`docs/ui_plan.md` is a draft, not an authorisation).
+explicitly untested and which now affects only *acquiring more* scenes, and (4) the **UI**, now placed at P2 with its scope and
+constraints recorded in **D35** and its plan reviewed and unblocked in `docs/ui_plan.md` §0.1 —
+ready to build.
 
 **Why this order.** Six half-finished arms score worse than one complete system with its gaps
 documented. §9 and §14 already record what is simulated and what is deferred; deferring

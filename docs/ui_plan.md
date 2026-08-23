@@ -1,10 +1,59 @@
 # UI plan — SIH Anomaly Detection desktop app
 
-**Status: planned, not started.** Written 2026-08-23. Reference implementation:
+**Status: planned, not started. Reviewed and unblocked 2026-08-23 — see §0.1 for four
+corrections made before this was cleared for handoff.** Written 2026-08-23. Reference implementation:
 `temp , downloads/sih2.py.py` (a standalone Tkinter EnMAP anomaly GUI that
 carries its own RX/PCA/Excel code). This plan adapts its *UI* to this repo; it
 deliberately does NOT reuse its science code, because this repo already has a
 validated pipeline with contracts and structured outputs.
+
+## 0.1 Corrections made before handoff (read these first)
+
+The plan below was written before review. Four things were wrong or missing; they are
+fixed here rather than in place, so the original reasoning stays legible.
+
+**1. `openpyxl` is now installed — this was a hard blocker.** `coordinates.xlsx` is this
+plan's central deliverable and neither `openpyxl` nor `xlsxwriter` was present, so pandas
+could not have written xlsx either. `openpyxl==3.1.5` is now in `requirements.in` and the
+lockfile, verified so that **no existing pin moved** (the last careless re-lock silently
+bumped scipy and broke the environment every committed run manifest records — see plan.md
+D34). Bold fonts, `PatternFill`, and `freeze_panes` are all smoke-tested working. **Do not
+re-lock or add further dependencies without checking that no other pin moves.**
+
+**2. Memory. This is the gap most likely to embarrass a live demo.** The plan defaults the
+file picker to `data/raw/enmap`, and a full EnMAP scene is **1173x1202x224 int16 = 631 MB on
+disk, ~1.3 GB as one float32 copy**. The pipeline makes several copies: the Phase 5 Level 2
+run on a full scene was **OOM-killed by the kernel at 8.7 GB RSS** (dmesg-confirmed; this
+machine has ~13 GB and **no swap**). The reference `sih2.py.py` used a 200x200 centre crop for
+exactly this reason.
+
+  **Required in v1, not deferred:** read windowed, never whole-scene. Level 2's own workaround
+  is the proven pattern — a `rasterio.windows.Window` read with `src.window_transform(window)`
+  so georeferencing stays real (a 600x402 crop ran at **829 MB peak RSS**). The UI must either
+  default to a bounded window with a visible size/extent control, or refuse a scene whose
+  estimated working-set exceeds a threshold with a clear message. **A progress bar that ends in
+  the kernel killing the process is worse than a refusal.** Show the estimate before running.
+
+**3. The `pipeline/run_pipeline.py` callback hook is unblocked.** The plan hedges about
+coordinating with "the sentinel-2 agent"; that work is finished and committed, and the file is
+free. Add the `progress_fn` / `log_fn` callbacks (`stage()` is at `pipeline/run_pipeline.py:120`)
+and use real progress. The indeterminate-progressbar fallback is no longer needed.
+
+**4. The UI must be placed in `plan.md` before it is built.** Every other component in this
+project has a dated decision note and a §11.1 priority tier; the UI had neither, which would
+make it the one piece of the system with no provenance. This is now recorded as **D35** and
+placed in §11.1. Read D35 before starting — it also states what the UI may and may not claim.
+
+### Two constraints inherited from the rest of the project
+
+- **`coordinates.xlsx` is a convenience export, not a contract output.** C6 (`core/contracts.py`)
+  is frozen at exactly 16 GeoJSON properties and the xlsx must not present itself as an
+  alternative authority. Derive it from the GeoJSON that `run_pipeline` already writes, so the
+  two cannot disagree; the plan's §2 already says this for the preview and it applies here too.
+- **Anything simulated stays labelled.** No power or energy figure may appear anywhere (§9, O2 —
+  no instrumented hardware exists), and edge/latency figures carry their `SIMULATED` label into
+  the UI. The Metadata sheet should record `git_sha` and package versions from the manifest so an
+  exported spreadsheet can be traced back to the run that made it.
 
 ## 0. Core principle
 
@@ -49,7 +98,7 @@ Layout mirrors `sih2.py.py::EnMAPAnomalyGUI` (proven pattern):
   reference (`ui_log`, `ui_progress`, `finish_success`, `finish_error`)
 
 ### `ui/excel_export.py` — coordinates.xlsx writer
-Port of the reference's `save_coordinates_excel` (3 sheets: Anomaly Regions /
+`openpyxl==3.1.5`, installed and verified (§0.1). Port of the reference's `save_coordinates_excel` (3 sheets: Anomaly Regions /
 Anomaly Pixels / Metadata; bold blue headers, freeze panes, auto-filter),
 with these input changes:
 - regions come from `run_pipeline`'s ROI list (bbox, mask, anomaly_score) —
