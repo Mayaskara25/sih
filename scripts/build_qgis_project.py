@@ -93,7 +93,17 @@ def _red_outline(layer: QgsVectorLayer, label_field: str = "roi_id") -> None:
          "outline_width": "1.4", "style": "no"}))
     if label_field in [f.name() for f in layer.fields()]:
         s = QgsPalLayerSettings()
-        s.fieldName = label_field
+        # Label with the ROI NUMBER, not the whole roi_id. roi_id is
+        # "{scene_id}:{branch}:{NNNN}", and scene_id carries the full product
+        # name -- so labelling the raw field printed ~76-character strings like
+        # "S2B_MSIL2A_20220330T052639_N0510_R105_T43RGM_..._stack:change:0012"
+        # across every ROI, which made the map unreadable at any zoom (observed
+        # on the Level 2 and Level 3 projects; recorded in plan.md D32).
+        # Everything after the last colon is the zero-padded index; the full
+        # roi_id is still one click away in the attribute table, so no
+        # information is lost. An id with no colon falls through unchanged.
+        s.fieldName = f"'#' || regexp_replace(\"{label_field}\", '^.*:', '')"
+        s.isExpression = True
         s.enabled = True
         fmt = QgsTextFormat()
         fmt.setFont(QFont("Sans", 9))

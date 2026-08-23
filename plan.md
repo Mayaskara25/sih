@@ -2061,13 +2061,22 @@ against the raster's own affine; the automatic round-trip figures in D32 (corner
 centroids <=0.707 GSD = the half-pixel diagonal, i.e. pure pixel-centre quantisation) said the
 affine plumbing was right, which is a strictly weaker claim and was labelled as such.
 
-**One cosmetic defect found by the same eyeball, recorded not fixed:** every ROI in the QGIS
-project is labelled with the full ~90-character product filename
+**One cosmetic defect found by the same eyeball — FIXED 2026-08-23 after it was flagged a second
+time on the Level 3 projects.** Every ROI in the QGIS project was labelled with the full
+~83-character product filename
 (`ENMAP01-____L2A-DT0000207637_..._CROP600x402-SPECTRAL_IMAGE_COG:anomaly:0015`), which makes the
 map unreadable at any zoom. The label expression in `scripts/build_qgis_project.py` uses the
 layer-qualified id where the bare `roi_id` (or its numeric tail) is what a reader needs. Cosmetic,
 not a data error -- the geometries and attributes are correct -- but it is the surface a
-demo audience sees, so it is logged here rather than left to be rediscovered.
+demo audience sees.
+
+`_red_outline` now labels with the expression `'#' || regexp_replace("roi_id", '^.*:', '')`
+(`isExpression = True`), i.e. the zero-padded index alone: **83 characters become 5** (`#0012`).
+The full `roi_id` remains one click away in the attribute table, so nothing is lost. All five
+projects were rebuilt -- `phase2_verify`, `demo_verify`, `phase5_level2_verify` and the two Level 3
+interval projects -- and each came back with its CRS and ROI count unchanged (3/3/33/9/10),
+confirming the change touched labelling and nothing else. An id containing no colon falls through
+unchanged rather than rendering empty.
 
 ---
 
