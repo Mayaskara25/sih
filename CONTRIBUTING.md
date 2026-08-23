@@ -53,17 +53,11 @@ Genuinely open right now:
   drift). Still documentation-only: **AVIRIS flightlines** and **USGS splib07**.
   The plan's rule stands: assume documentation is wrong until you open the file.
   Both verifications found the spec wrong — EnMAP in D32, Sentinel-2 twice in D34.
-- **`fetch_enmap.py` — the highest-value open item.** The DLR download leg **works**
-  (`scripts/verify_access.py::dlr()` passes: CAS login returns a TGC, an authenticated
-  asset GET returns real TIFF bytes), but **nothing in this repo can reproduce a
-  download.** Of the 20 local scenes, 8 were fetched by hand and 12 by a script that
-  was never committed. `find_enmap_scenes.py` only *searches* — STAC, no auth — and
-  tells you to download in a browser. So a teammate who clones this cannot obtain
-  EnMAP data, and the 20 scenes we have are unreproducible artifacts.
-  Wanted: a fetcher using `core.credentials.require("dlr")`, the CAS/TGC flow already
-  demonstrated in `verify_access.py`, and the asset URLs `find_enmap_scenes.py`
-  already emits — writing a manifest (ids, dates, bytes, checksums) so a download can
-  be verified and resumed. Nothing external blocks it.
+- **`fetch_enmap.py` — DONE 2026-08-23 (D36).** The DLR download leg works and is now
+  reproducible: `scripts/fetch_enmap.py` searches, authenticates, downloads bounded by
+  `--limit` with a size projection and disk check, verifies magic bytes, and writes
+  `docs/enmap_fetch_manifest.json` with sha256 per asset. `--reconcile` retroactively
+  indexed the 20 pre-existing scenes, so they are no longer unreproducible artifacts.
 - **Fetchers — `fetch_sentinel2.py` exists** and works (CDSE), and is the model to
   follow: credentials via `core.credentials`, re-runnable, manifest-merging, bounded.
 - **`scripts/fetch_speclib.py::ingest()`** is a deliberate stub (D21): a human

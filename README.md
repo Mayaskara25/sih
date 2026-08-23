@@ -45,7 +45,7 @@ it. Pick by what you want to do:
 | run the demo | HAD100 | 7.7 G | manual, see below |
 | run the benchmark | + ABU, HYDICE, Indian Pines | ~50 M | `scripts/fetch_hydice.py`; others manual |
 | retrain segmentation | + harmonized pool | 5.9 G | `scripts/build_background_pool.py` (generates it) |
-| redo Level 2 (EnMAP) | EnMAP L2A | 8.4 G | needs a DLR account — `docs/enmap_handover.md` |
+| redo Level 2 (EnMAP) | EnMAP L2A | 9.1 G | `scripts/fetch_enmap.py`, needs a DLR account |
 | redo Level 3 (Sentinel-2) | Sentinel-2 L2A | 5 M | `scripts/fetch_sentinel2.py`, needs CDSE keys |
 
 **HAD100** — the one you most likely want — is a manual download from

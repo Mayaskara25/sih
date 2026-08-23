@@ -2277,6 +2277,53 @@ pointed at `data/raw/enmap` puts that one click away. v1 must read windowed with
 with an explanation. **A progress bar that ends in a SIGKILL is worse than a refusal**, and on a
 demo machine in front of judges it is the difference between a limitation and a crash.
 
+### D36 — `scripts/fetch_enmap.py` built (2026-08-23). The 20 EnMAP scenes stop being unreproducible artifacts. Its crash-safety was proven by an actual crash, not by a test.
+
+O11 closed the question of whether the DLR download leg *works*. It left open a
+different one that mattered more: **nothing in this repo could reproduce a download.**
+8 of the 20 local products were fetched by hand and 12 by a script that was never
+committed; `find_enmap_scenes.py` only searches (STAC, no auth) and directs the user to
+a browser. A fresh clone could verify the 20 scenes and obtain none of them.
+
+**Built by wiring existing pieces rather than reimplementing them** — `verify_access._cas_login`
+for the CAS/TGC flow, `find_enmap_scenes.search` for the STAC query, `core.http_guard.assert_magic`
+for byte checking, and `verify_enmap.find_metadata` for the `-METADATA.XML` vs `.XML.XML`
+lookup (both spellings genuinely occur). `fetch_sentinel2.py` was the structural model.
+
+**`--reconcile` is the part that fixes the existing data.** It indexes products already on
+disk into the manifest without re-downloading: measured, **20 scenes, 5 assets each, 8.36 GB**,
+every one resolving against the live catalogue (`catalog_lookup_ok=True`). The 20 scenes now
+have recorded ids, dates, cloud cover, source URLs, byte counts and **sha256 per asset** —
+which is what makes them reproducible rather than merely present.
+
+**Verified end to end by running it, not by reading it:**
+
+| check | result |
+|---|---|
+| `--reconcile` over existing data | 20 products, 8.36 GB, all catalogue-resolved |
+| live fetch, `--limit 1 --max-cloud 5` | CAS login → TGC; projected 396.67 MB before downloading; fetched 392.57 MB cube + 4.10 MB metadata, sha256 recorded |
+| `--limit` honoured | 7 further candidates explicitly SKIPped, not silently ignored |
+| already-present scenes | 18 recorded as `cached`, not re-downloaded |
+| manifest integrity | 22 products, 22 cubes on disk, **zero products whose cube is absent** |
+| credential material in manifest | none (scanned) |
+| `scripts/verify_enmap.py` over all 22 | **exit 0**, every invariant holds, bands 131-135 nodata reproduces on the new scenes |
+
+**The `.part` design was validated by a real interruption rather than a mock.** The agent
+building this hit a session limit **mid-download**. It left a **112 MB `.part`** file and
+**no truncated `.TIF`** — the scene count stayed at 20, and `verify_enmap.py` still exited 0
+rather than being fooled by a half-written cube. That is precisely the failure this project
+would otherwise have discovered by trusting a corrupt scene, and it was tested by accident
+under the only condition that matters.
+
+**Second observation of the D34 memory flake, and it strengthens the finding.**
+`tests/test_edge_streaming.py::test_memory_budget_exceeded_raised_before_cap` failed again —
+again with **two full pytest suites running concurrently** (the agent had left one running).
+D34 recorded one observation and declined to call it a defect. Two observations under the
+identical condition make it reproducible-under-concurrency: the 1 GB ceiling is **psutil-sampled**,
+sampling is periodic, and under memory pressure a 2.56 GB spike can pass between samples. It
+passes reliably when run alone. **This is a real property of `StripPipeline`'s guarantee, not
+a test artefact**, and `docs/edge.md`'s claim for that ceiling should be read with it.
+
 ---
 
 ## 2. Frozen Contracts v1.0

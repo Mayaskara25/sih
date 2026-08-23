@@ -38,6 +38,21 @@ def _datatake(scene_id: str) -> str:
     return m.group() if m else scene_id
 
 
+def _num(v, *, default):
+    """Coerce a STAC property that SHOULD be numeric but, verified 2026-08-23,
+    genuinely is not always (eo:cloud_cover/eo:snow_cover arrive as int on some
+    features and as a numeric string on others from the same search). `None`
+    (property absent) returns `default`; a value that is neither None nor
+    coercible to float is returned AS-IS rather than silently dropped, so a
+    genuinely unexpected shape surfaces downstream instead of vanishing here."""
+    if v is None:
+        return default
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return v
+
+
 def search(bbox: str, start: str | None, end: str | None,
            max_cloud: float, limit: int, per_datatake: int,
            assets: tuple[str, ...], page_cap: int = 40) -> list[dict]:
@@ -52,7 +67,17 @@ def search(bbox: str, start: str | None, end: str | None,
         doc = r.json()
         for f in doc.get("features", []):
             p = f["properties"]
-            if p.get("eo:cloud_cover", 101) > max_cloud:
+            # DLR's live STAC API serializes eo:cloud_cover (and eo:snow_cover)
+            # inconsistently -- int on some features, a numeric STRING on others,
+            # verified 2026-08-23 by paging the raw search response for this same
+            # bbox (both types seen within the first 5 pages, not tied to a
+            # particular page or date range). An un-coerced `> max_cloud` compare
+            # raises TypeError on the string-typed features rather than filtering
+            # them, so every numeric catalogue field read here is coerced via
+            # `_num` -- never assumed to already be numeric just because the STAC
+            # spec says it should be.
+            cloud = _num(p.get("eo:cloud_cover"), default=101.0)
+            if cloud > max_cloud:
                 continue
             # One overpass produces consecutive tiles seconds apart. They are
             # near-duplicates, and letting several through would put correlated
@@ -65,8 +90,8 @@ def search(bbox: str, start: str | None, end: str | None,
             out.append({
                 "id": f["id"],
                 "date": p.get("datetime", "")[:19],
-                "cloud": p.get("eo:cloud_cover"),
-                "snow": p.get("eo:snow_cover"),
+                "cloud": cloud,
+                "snow": _num(p.get("eo:snow_cover"), default=None),
                 "epsg": p.get("proj:epsg"),
                 # Declared by the catalogue -- still UNVERIFIED against the file.
                 # PLAN.md 8.0 requires opening the product to confirm it.
