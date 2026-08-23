@@ -48,11 +48,15 @@ The dependency DAG is `plan.md` §11. Current state of the branches:
 
 Genuinely open right now:
 
-- **Phase 5 §8.0**: `verify_phase5_datasets.py` does not exist — EnMAP L2A /
-  Sentinel-2 / AVIRIS / splib07 are still documentation-only in
-  `docs/datasets.md`. The plan's rule is "assume documentation is wrong."
-- **Fetchers**: `fetch_enmap.py` and `fetch_sentinel2.py` (§8.0a obligations).
-  EnMAP download is externally blocked (O11); Sentinel-2 needs a site choice (O5).
+- **Phase 5 §8.0 — partly done.** EnMAP L2A and Sentinel-2 are now **verified**
+  (`scripts/verify_enmap.py`, `scripts/verify_sentinel2.py`, both exit non-zero on
+  drift). Still documentation-only: **AVIRIS flightlines** and **USGS splib07**.
+  The plan's rule stands: assume documentation is wrong until you open the file.
+  Both verifications found the spec wrong — EnMAP in D32, Sentinel-2 twice in D34.
+- **Fetchers — `fetch_sentinel2.py` exists** and works (CDSE). `fetch_enmap.py` was
+  never written: the 20 local scenes were fetched manually, so a scripted,
+  re-runnable fetcher with a manifest is still open work. O11 and O5 are both
+  resolved, so nothing external blocks it.
 - **`scripts/fetch_speclib.py::ingest()`** is a deliberate stub (D21): a human
   must browser-download the archive first; the parser gets written against the
   real files. This is the cheapest unblock in the project.

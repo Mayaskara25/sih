@@ -63,10 +63,19 @@ HAD100/AVIRIS scene with real georeferencing.
 | 3A detectors | done. `global_rx` · `local_rx` · `kernel_rx` · `crd` · `streaming_rx` · `fused`. |
 | Phase 4 | done. Registry (§4.1) + recall calibration (§4.2) + `roi_fusion` (§4.3). |
 | Phase 5 Level 1 | done. Benchmark + `cascade_recall_audit`. |
-| Phase 7 demo | done. Runs on HAD100, not EnMAP (O11). Step 10 (temporal t1-vs-t2) **RUNS**, labelled `SYNTHETIC-PAIRS` throughout; step 11 (classical-vs-quantum) still skips — not for lack of a built branch, but because its results are owned by the quantum branch and demo.py is deliberately not wired to reproduce them. |
+| Phase 7 demo | done. Runs on HAD100 (its §10 sequence is built around HAD100's labelled patches; EnMAP is exercised by Phase 5 Level 2 instead). Step 10 (temporal t1-vs-t2) **RUNS**, labelled `SYNTHETIC-PAIRS` throughout; step 11 (classical-vs-quantum) still skips — not for lack of a built branch, but because its results are owned by the quantum branch and demo.py is deliberately not wired to reproduce them. |
 | 3E quantum | done. Seven arms built (`quantum/`), comparison run 2026-08-22 — every quantum arm loses to `rx_8feat`; table in `docs/experiments.md` §4. |
-| 3C change detection | done (D30). `change_detection/` + `preprocessing/registration.py` + `preprocessing/cloud_mask.py`. Every reported number is **SYNTHETIC-PAIRS** — no real bi-temporal hyperspectral pair exists on disk (O11). SAM + physics fusion beats classical differencing and the learned Siamese arm on both AUC and pseudo-change suppression; the Siamese arm is worst of the three at a modest training budget. |
+| 3C change detection | done (D30). `change_detection/` + `preprocessing/registration.py` + `preprocessing/cloud_mask.py`. Every reported number is **SYNTHETIC-PAIRS** — no real bi-temporal hyperspectral pair exists on disk (checked: none of the 20 EnMAP scenes overlap at different dates). SAM + physics fusion beats classical differencing and the learned Siamese arm on both AUC and pseudo-change suppression; the Siamese arm is worst of the three at a modest training budget. |
 | 3D edge | done (D31). `edge/` — profiling, constrained_sim, streaming, quantization, onnx_inference, roi_pipeline, benchmark. Everything labelled `SIMULATED`, no power figure anywhere. Both headline criteria came back **negative**: ROI-vs-full pixel fraction on ABU-Airport-1 is 3.69× the scene against a <10% target (a scene-size-vs-patch-size effect, not a cascade defect), and UNet quantization reaches 1.82× against a ~12× literature target with INT8 never applied. |
+| Phase 5 Level 2 | **done and CLOSED (D32).** EnMAP, 30 m. Accept criterion met — polygon centroids within 2 px, human-verified in QGIS against an OpenStreetMap basemap. First criterion here checked against an independent real-world reference rather than the raster's own affine. |
+| Phase 5 Level 3 | **done, NOT accepted (D34).** Sentinel-2 over Jewar, 4 dates. Pipeline runs and outputs are correctly dated, but the study **cannot separate construction from seasonal change**, and its ROI areas are a within-scene ranking, not an absolute measure. §8 gives Level 3 no numeric accept criterion, so there is nothing to certify automatically. |
+| UI | **done (D35).** `ui/` — thin front-end over `run_pipeline`; anomaly detection only in v1. Its OOM guard shipped broken and was fixed in review. |
+
+**Everything in P0-P2 is built.** What remains is not code: the human QGIS pass on Level 3, and
+the permanently-blocked hardware items (O1 no IBM Quantum account, O2 no Raspberry Pi).
+
+**Start with [results.md](results.md)** for the honest one-page summary of what works, what
+doesn't, and where each claim's evidence lives.
 
 ## 5. Six defects that execution found and review did not
 

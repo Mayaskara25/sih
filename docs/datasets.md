@@ -171,14 +171,17 @@ Hub OAuth flow is **not** used; that dashboard was sunset 2026-03-20 and served 
 
 **Never print the credentials file.** See `CLAUDE.md`. Full rationale in PLAN.md §4.1b.
 
-## What is buildable while EnMAP is blocked
+## EnMAP access — resolved
 
 **Correction, 2026-08-23 (PLAN.md D32): EnMAP L2A was never blocking Phase 5 Level 2 — 8 complete
 products were on local disk, verified above, and Level 2 has been run.** The line below is left
 as originally written; only this correction changes it. See [buildable_now.md](buildable_now.md)
-— the critical path was unblocked regardless, and what actually still gates anything EnMAP-related
-is the live DLR download leg (untested by this correction — PLAN.md O11), which matters only for
-*acquiring more* EnMAP scenes or for O12/SpectralEarth, not for Phase 5 Level 2 itself.
+— the critical path was unblocked regardless, and **Further correction, 2026-08-23 (PLAN.md O11 RESOLVED): the DLR download leg works.** Access was
+obtained and 12 further L2A products fetched, bringing the local total to **20** (~8.4 GB); all 20
+re-verified by `scripts/verify_enmap.py`, which exits 0 and reproduces every invariant including the
+bands 131-135 fully-nodata finding on all 12 new scenes. **Checked and negative:** no two of the 20
+overlap spatially at different dates, so this does NOT supply a real bi-temporal hyperspectral pair,
+and branch 3C's SYNTHETIC-PAIRS constraint (D30) stands unchanged.
 
 <!-- BEGIN test_env.py version table (auto-generated) -->
 ## Environment
