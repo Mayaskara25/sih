@@ -1,5 +1,5 @@
 {
-  "git_sha": "4f47a402ad8c55eae620bb59b606bb045d941e0d",
+  "git_sha": "4236f5a3afe3d229a9ca73dcd97633649d269f17",
   "package_versions": {
     "numpy": "2.5.2",
     "scipy": "1.18.0",
@@ -17,7 +17,7 @@
   "n_test_scenes_total": 28,
   "n_test_scenes_scored": 28,
   "max_bg_per_scene": 400,
-  "runtime_s": 3181.7154848069913,
+  "runtime_s": 1538.7169865000033,
   "arms": {
     "classical_ae": {
       "arm": "classical_ae",
@@ -50,11 +50,11 @@
           "val_auc": 0.4817627206645898
         }
       ],
-      "fit_wall_clock_s": 0.7233104909973918,
-      "sweep_wall_clock_s": 27.645174329998554,
+      "fit_wall_clock_s": 1.0322021999891149,
+      "sweep_wall_clock_s": 8.23593969999638,
       "wall_clock_kind": "classical_cpu",
       "circuit_info": null,
-      "val_threshold": 0.006003746544102268,
+      "val_threshold": 0.006003745468717095,
       "val_threshold_fp_rate": 0.9972222222222222,
       "status": "ok",
       "note": ""
@@ -153,8 +153,8 @@
           "val_auc": 0.7193016614745588
         }
       ],
-      "fit_wall_clock_s": 0.005402757989941165,
-      "sweep_wall_clock_s": 0.1402688560046954,
+      "fit_wall_clock_s": 0.006948900001589209,
+      "sweep_wall_clock_s": 0.23948370000289287,
       "wall_clock_kind": "classical_cpu",
       "circuit_info": null,
       "val_threshold": 0.06889692845400452,
@@ -235,8 +235,8 @@
           "val_auc": 0.9032320872274143
         }
       ],
-      "fit_wall_clock_s": 0.013629174995003268,
-      "sweep_wall_clock_s": 0.33001563300786074,
+      "fit_wall_clock_s": 0.015408299994305708,
+      "sweep_wall_clock_s": 0.5692609999969136,
       "wall_clock_kind": "classical_cpu",
       "circuit_info": null,
       "val_threshold": -1.1783221795158267,
@@ -289,8 +289,8 @@
           "val_auc": 0.4793094496365524
         }
       ],
-      "fit_wall_clock_s": 0.00022513899602927268,
-      "sweep_wall_clock_s": 0.11979811800119933,
+      "fit_wall_clock_s": 0.0005546000029426068,
+      "sweep_wall_clock_s": 0.04239869999582879,
       "wall_clock_kind": "classical_cpu",
       "circuit_info": null,
       "val_threshold": 2.818103114198606,
@@ -312,11 +312,11 @@
             "ansatz_reps": 3,
             "maxiter": 200
           },
-          "val_auc": 0.5143042575285566
+          "val_auc": 0.5148559190031152
         }
       ],
-      "fit_wall_clock_s": 1671.0050401210028,
-      "sweep_wall_clock_s": 1680.462830991004,
+      "fit_wall_clock_s": 929.1229406000057,
+      "sweep_wall_clock_s": 932.2317791999958,
       "wall_clock_kind": "aer_statevector_sampler_cpu",
       "circuit_info": {
         "depth": 41,
@@ -338,8 +338,8 @@
         "optimizer": "COBYLA",
         "maxiter": 200
       },
-      "val_threshold": 0.3056640625,
-      "val_threshold_fp_rate": 0.8833333333333333,
+      "val_threshold": 0.2919921875,
+      "val_threshold_fp_rate": 0.8861111111111111,
       "status": "ok",
       "note": ""
     },
@@ -357,11 +357,11 @@
             "ansatz_reps": 3,
             "maxiter": 150
           },
-          "val_auc": 0.5459761163032191
+          "val_auc": 0.5737928348909658
         }
       ],
-      "fit_wall_clock_s": 796.100541451,
-      "sweep_wall_clock_s": 804.341215035005,
+      "fit_wall_clock_s": 312.36611030000495,
+      "sweep_wall_clock_s": 317.3082768999884,
       "wall_clock_kind": "exact_statevector_cpu",
       "circuit_info": {
         "depth": 79,
@@ -385,8 +385,8 @@
         "optimizer": "COBYLA",
         "maxiter": 150
       },
-      "val_threshold": 0.6177565619645212,
-      "val_threshold_fp_rate": 0.9305555555555556,
+      "val_threshold": 0.5447005916995227,
+      "val_threshold_fp_rate": 0.9333333333333333,
       "status": "ok",
       "note": ""
     },
@@ -412,13 +412,13 @@
             "kind": "zz",
             "reps": 2,
             "n_background": 300,
-            "mean_offdiag": 0.03837404356087005,
-            "p99_offdiag": 0.9006069132289357
+            "mean_offdiag": 0.038374043560870055,
+            "p99_offdiag": 0.9006069132289359
           }
         }
       ],
-      "fit_wall_clock_s": 1.0902561050024815,
-      "sweep_wall_clock_s": 5.756624253001064,
+      "fit_wall_clock_s": 0.4500129999942146,
+      "sweep_wall_clock_s": 2.139685799993458,
       "wall_clock_kind": "exact_statevector_cpu",
       "circuit_info": {
         "depth": 33,
@@ -437,7 +437,7 @@
         "optimization_level": 1,
         "n_qubits": 8
       },
-      "val_threshold": 0.21827349337357643,
+      "val_threshold": 0.21827349337357665,
       "val_threshold_fp_rate": 0.8194444444444444,
       "status": "ok",
       "note": ""
@@ -464,8 +464,8 @@
             "kind": "zz",
             "reps": 2,
             "n_background": 300,
-            "mean_offdiag": 0.03837404356087005,
-            "p99_offdiag": 0.9006069132289357
+            "mean_offdiag": 0.038374043560870055,
+            "p99_offdiag": 0.9006069132289359
           }
         },
         {
@@ -474,7 +474,7 @@
             "reps": 2,
             "angle_scale": 0.5
           },
-          "val_auc": 0.7044392523364486,
+          "val_auc": 0.7044522326064382,
           "extra": {
             "angle_scale": 0.5,
             "kind": "zz",
@@ -490,14 +490,14 @@
             "reps": 2,
             "angle_scale": 0.25
           },
-          "val_auc": 0.594223779854621,
+          "val_auc": 0.5942237798546209,
           "extra": {
             "angle_scale": 0.25,
             "kind": "zz",
             "reps": 2,
             "n_background": 300,
             "mean_offdiag": 0.15492896953794313,
-            "p99_offdiag": 0.98674518411967
+            "p99_offdiag": 0.9867451841196696
           }
         },
         {
@@ -506,7 +506,7 @@
             "reps": 2,
             "angle_scale": 0.125
           },
-          "val_auc": 0.4826713395638629,
+          "val_auc": 0.482671339563863,
           "extra": {
             "angle_scale": 0.125,
             "kind": "zz",
@@ -517,8 +517,8 @@
           }
         }
       ],
-      "fit_wall_clock_s": 1.2940373720048228,
-      "sweep_wall_clock_s": 24.73850274599681,
+      "fit_wall_clock_s": 0.4323729000025196,
+      "sweep_wall_clock_s": 12.368647499999497,
       "wall_clock_kind": "exact_statevector_cpu",
       "circuit_info": {
         "depth": 33,
@@ -537,7 +537,7 @@
         "optimization_level": 1,
         "n_qubits": 8
       },
-      "val_threshold": -0.19089195425801297,
+      "val_threshold": -0.1908430464789992,
       "val_threshold_fp_rate": 0.9972222222222222,
       "status": "ok",
       "note": ""
@@ -549,8 +549,8 @@
       "kind": "zz",
       "reps": 2,
       "n_background": 300,
-      "mean_offdiag": 0.03837404356087005,
-      "p99_offdiag": 0.9006069132289357
+      "mean_offdiag": 0.038374043560870055,
+      "p99_offdiag": 0.9006069132289359
     },
     "quantum_kernel_valscale": {
       "angle_scale": 0.5,
@@ -566,11 +566,11 @@
       "reps": 1,
       "n_background": 300,
       "mean_offdiag": 0.04836139003488188,
-      "p99_offdiag": 0.9437584555471942
+      "p99_offdiag": 0.9437584555471937
     }
   },
   "outputs": {
-    "results_csv": "experiments/quantum_results/results.csv",
-    "results_pooled_csv": "experiments/quantum_results/results_pooled.csv"
+    "results_csv": "experiments\\quantum_results\\results.csv",
+    "results_pooled_csv": "experiments\\quantum_results\\results_pooled.csv"
   }
 }
