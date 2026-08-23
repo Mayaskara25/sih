@@ -1,0 +1,17 @@
+{
+  "shift_px": {
+    "row": 0.0,
+    "col": -0.10000000149011612
+  },
+  "residual_px": {
+    "row": -0.05000000074505806,
+    "col": 0.20000000298023224
+  },
+  "rmse_px": 0.20615528523921967,
+  "ecc_score": 0.3975804402021976,
+  "converged": true,
+  "pcc_error": 1.0,
+  "meta_t1_georef": "real",
+  "meta_t2_georef": "real",
+  "status": "ok"
+}

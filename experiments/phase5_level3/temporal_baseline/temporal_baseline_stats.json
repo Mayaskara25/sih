@@ -1,0 +1,18 @@
+{
+  "n_baseline_epochs": 2,
+  "baseline_dates": [
+    "2020-10-16",
+    "2022-03-30"
+  ],
+  "scored_date": "2026-06-17",
+  "note": "MAD over 2 points is |a-b|/2 -- a coarse, low-power baseline, not a robust multi-epoch statistic; reported as such, not as a strong detector.",
+  "z_bandmean_summary": {
+    "n_valid": 90000,
+    "mean": 101.15726470947266,
+    "median": 5.410280227661133,
+    "p95": 56.6103630065918,
+    "min": 0.058052193373441696,
+    "max": 117782.0390625
+  },
+  "frac_px_z_gt_3": 0.6813777777777777
+}

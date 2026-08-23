@@ -2115,6 +2115,87 @@ sign-off above still stands. Existing committed GeoJSONs elsewhere (`experiments
 `experiments/demo/`) still carry run dates from sources with no acquisition time -- for those the
 run date remains the only available value, and re-running them would change nothing.
 
+### D34 — Phase 5 Level 3 ran end to end (2026-08-23) on a real Sentinel-2 series over Jewar. The pipeline works; **the case study does not establish that the change it ranks is construction rather than season**, and that limit is the finding, not a gap to be closed by tuning.
+
+`scripts/run_level3_case_study.py`, four L2A products over Noida International Airport (Jewar),
+MGRS T43RGM, 300x300 px at 20 m, bands B02/B03/B04/B8A/B11/B12 + SCL. Outputs in
+`experiments/phase5_level3/`, write-up in `docs/validation.md`, QGIS projects
+`phase5_level3_20201016_to_20220330.qgz` and `..._20220330_to_20260617.qgz`.
+
+**Sentinel-2 verified against files for the first time (`scripts/verify_sentinel2.py` ->
+`docs/sentinel2_verified.json`), and §15 was wrong twice, both times half-right:**
+
+| §15 claim | what the files say |
+|---|---|
+| "~13 bands multispectral" | **13 defined** in metadata `<Spectral_Information>`, **12 delivered** -- B10 has no image file at any resolution in L2A |
+| "10/20/60 m mixing; Level 3 code must not assume one grid" | true at **sensor** level, **false for the `landcover` 6-band set**, which ESA's L2A processor ships pre-resampled to 20 m. Zero on-the-fly resampling was needed |
+
+`BOA_QUANTIFICATION_VALUE` 10000 and `BOA_ADD_OFFSET` **-1000**, read per-product across four
+processing baselines (05.00/05.10/05.11/05.12), never assumed. The cube is stored as **raw DN**:
+`(DN - 1000)/10000` must be applied before any index, and the resulting negatives are legitimate
+over water (190 such pixels on the 2024 date, min -0.0086) and are not clipped.
+
+**The sensor confound was measured, and the primary series was chosen to avoid it.** Three
+products are S2B and one is S2A, with band centres differing by **16.7 nm on B12** (2185.7 vs
+2202.4) and 3.3 nm on B11. Mean SAM across sensors is 0.174/0.189 against 0.141/0.176 within
+sensor -- time gaps are not controlled for, so this is an upper bound on the effect, not an
+isolate of it. **The primary time series is therefore S2B-only** (2020-10-16 -> 2022-03-30 ->
+2026-06-17), which still spans pre-groundbreaking farmland through operational airport. The S2A
+date appears only as a labelled secondary observation. A cross-sensor SAM comparison measures the
+instrument as well as the ground, and that is the same class of error §3E.2 and D28 name.
+
+**What the run does NOT establish, stated because the numbers invite the opposite reading:**
+
+1. **The reported ROI areas are not a measurement of how much changed.** Selection is a fixed
+   top-5%-of-scene percentile, so ~180 ha is selected *whether or not anything changed* -- running
+   the identical procedure on an unchanged pair yields a comparable area. The figures are a
+   relative within-scene ranking, and `docs/validation.md` says so at the point of quoting them.
+2. **The NDVI progression cannot be separated from season by this dataset.** Scene-mean NDVI falls
+   24.3% -> 8.6% -> 4.8% -> 14.5%, consistent with vegetated -> bare/built. It is equally
+   consistent with an ordinary agricultural cycle: 2020-10-16 is post-monsoon, 2022-03-30 is
+   spring, 2026-06-17 is pre-monsoon. Four single-year snapshots cannot distinguish a one-off
+   land-use conversion from a seasonal cycle. The dated public groundbreaking (25 Nov 2021) is
+   **corroboration of an observation, never a conclusion the imagery proves** (§8, Roadmap
+   §1.9/§9.7).
+3. **The fused score's correlation with |dNDVI| resolves nothing.** Both the target (vegetation ->
+   built) and the confound (seasonal cycle) produce the same signature, so a high correlation is
+   expected under either hypothesis and discriminates between them not at all.
+4. **`TemporalBaseline` is unusable at n=2 epochs.** MAD over two points is `|a-b|/2`; 68.1% of
+   pixels exceed z>3 and the max z is 117 782. It was run because §8 names it, and it is reported
+   as a non-result rather than quietly dropped.
+5. **The cloud mask was not exercised.** SCL is all-clear on all four dates, so this run cannot
+   demonstrate masking working on an actually-cloudy scene.
+
+**Code limitation found, not worked around silently.** `anomaly.scoring.spectral_index_score`'s
+SWIR1 lookup (1650 nm, 15 nm tolerance) cannot resolve against Sentinel-2's real B11 (~1610 nm)
+and raises. The runner reused the index formulas with verified fixed-position band selection;
+`anomaly/scoring.py` was **not** modified to widen the tolerance, because loosening a wavelength
+tolerance to make a lookup succeed is how a band gets silently mismatched.
+
+**Level 3 is NOT accepted.** Unlike Level 2, §8 states no numeric accept criterion for Level 3, so
+there is nothing to certify against automatically; the visual QGIS-against-basemap check remains a
+human step, with instructions in `docs/validation.md`. `meta.acquired` was verified to reach every
+GeoJSON feature (D33 working end to end: the two primary intervals carry `2022-03-30T05:41:00Z`
+and `2026-06-17T05:41:01Z`, not the run date). Co-registration was run as a **verification** rather
+than a correction -- the four geotransforms are byte-identical -- and measured residuals of
+0.11-0.40 px.
+
+**Two environment findings from the same session, recorded so they are not rediscovered:**
+
+- **A silent `scipy` bump was caught and reverted.** Re-locking to add `requests` moved scipy
+  1.18.0 -> 1.18.1 in the venv while every committed run manifest still recorded 1.18.0.
+  This is not cosmetic: **qiskit's COBYLA runs on scipy's bundled pyprima**, so D29's entire
+  quantum comparison was produced by an optimizer no longer installed. Reverted, and
+  `scipy==1.18.0` is now pinned in `requirements.in` so a future re-lock cannot drift it. The
+  lockfile was re-verified to recompile identically.
+- **`tests/test_edge_streaming.py::test_memory_budget_exceeded_raised_before_cap` is flaky under
+  memory pressure.** Seen failing once in three full-suite runs, only with two complete suites
+  running concurrently; not reproducible in 11 targeted attempts including 4-way concurrency. The
+  test allocates a 2.56 GB spike and expects a **psutil-sampled** 1 GB ceiling to catch it, and
+  sampling is periodic by construction, so a fast spike can pass between samples. One observation
+  is not a defect finding, but the guarantee `docs/edge.md` claims for `StripPipeline` rests on
+  that sampling, so it is logged here rather than forgotten.
+
 ---
 
 ## 2. Frozen Contracts v1.0
@@ -3503,20 +3584,28 @@ originally written, with only this framing corrected: Level 3, not Level 2, was 
 identified as buildable, but Level 2 turns out to have been buildable too, and the set of
 "permanently-blocked" items shrinks to Phase 6 Tier B and 3E.7.
 
-**The project's main remaining buildable work is Phase 5 Level 3 (added 2026-08-23).** Unlike
-the permanently-blocked items — Phase 6 Tier B (O2, no Pi) and 3E.7 (O1, no IBM Quantum account)
-— Level 3 (§8, around the Sentinel-2 multitemporal case study) is **not blocked**. CDSE credentials are configured
-(`scripts/check_credentials.py` → exit 0, per `docs/buildable_now.md` §1; this confirms
-configuration, not that the download leg itself succeeds — O10 notes an expired-but-present key
-looks identical to a working one until a real request is made). 3C, now built, delivers every
-processing component §8 Level 3's pipeline line calls for: cloud mask, registration, temporal
-baseline, SAM + physics fusion, and ROI → GeoJSON → QGIS. What is actually missing is (1) a
-Sentinel-2 fetcher — no `scripts/fetch_sentinel2.py` exists in this tree — and the case-study run
-itself, (2) **O5**, choosing a dated-event site, and (3) §8.0's `verify_phase5_datasets.py` pass
-on Sentinel-2, which §15 still lists in the documentation-only tier ("Level 3 only") — no file
-has been opened, so band subset, resolution mixing, and no-data handling remain unverified per
-this project's own standard. Level 3's reporting constraint (§8, Roadmap §1.9/§9.7) is unchanged
-and applies in full to whatever this produces.
+**Phase 5 Level 3 is BUILT and RUN (2026-08-23, D34).** This paragraph previously named it the
+project's main remaining buildable work; it is no longer. CDSE access was proven live, Sentinel-2
+was verified against real files for the first time (`scripts/verify_sentinel2.py` — §15 was wrong
+twice, see D34), `scripts/fetch_sentinel2.py` and a `source="sentinel2"` loader path were built,
+**O5 is resolved** (Jewar, T43RGM), and the case study ran end to end over four dates.
+
+**What Level 3 established, and what it did not.** The pipeline runs and its outputs are
+well-formed and correctly dated. It does **not** establish that the change it ranks is
+construction rather than seasonal agriculture — four single-year snapshots cannot separate the
+two, and the fused score's correlation with |dNDVI| is expected under either hypothesis. Nor are
+the reported ROI areas an absolute measure of change: a fixed top-5% percentile selects a
+comparable area whether or not anything changed. Both limits are D34's substance and are recorded
+at the point of quoting the numbers, not in a footnote. Level 3 has **no numeric accept criterion
+in §8**, so unlike Level 2 there is nothing to certify automatically; the QGIS-against-basemap
+check remains a human step and **Level 3 is not marked accepted**.
+
+**So what actually remains.** Nothing in P0–P2 is unbuilt. The open items are (1) the human QGIS
+pass on Level 3, (2) the permanently-blocked hardware items — Phase 6 Tier B (O2, no Pi) and 3E.7
+(O1, no IBM Quantum account), (3) whether the EnMAP **download leg** works today, which O11 leaves
+explicitly untested and which now affects only *acquiring more* scenes, and (4) a UI, which
+appears nowhere in this plan and would need its own placement before being built
+(`docs/ui_plan.md` is a draft, not an authorisation).
 
 **Why this order.** Six half-finished arms score worse than one complete system with its gaps
 documented. §9 and §14 already record what is simulated and what is deferred; deferring
@@ -3597,7 +3686,7 @@ Train/test leakage would invalidate every number in the report, and it is the ki
 | O11 | **EnMAP download entitlement — the CONSEQUENCE drawn from this was wrong. Corrected 2026-08-23 (D32): 8 complete L2A products were already on local disk, and Phase 5 Level 2 has now been run.** | The entitlement-denial diagnosis immediately below (CAS 401/403, refined 2026-08-21) describes the live DOWNLOAD LEG and is **left exactly as recorded — neither confirmed nor retracted by this correction**, because it was never re-tested here (see the right-hand column). What was false is the inference drawn from it: eight complete EnMAP L2A products (~3.6 GB, 40 files, `data/raw/enmap/`) were sitting on disk on 2026-08-21 — the *same day* this row declared Phase 5 Level 2 "blocked" and the *same day* D16 opened one of those eight products' metadata. The files were never inaccessible; only the live download path was in question, and that question was never the same as "can Level 2 run." `scripts/verify_enmap.py` (2026-08-23) opened and validated all 8 products directly: 224 bands, int16, nodata −32768.0, GSD 30 m — uniform across all 8; CRS varies by scene footprint (EPSG:32642 ×3, 32643 ×3, 32644 ×2); wavelength grid byte-identical (SHA-256) across all 8, 418.416–2445.30 nm, strictly ascending; `harmonize.coverage_ok == False` on all 8 (8/184 canonical bands uncovered), reproducing D16 exactly. Phase 5 Level 2 then ran end-to-end on one scene — see **D32** for the run, its numbers, and what still needs a human. *(Original 2026-08-21 text, preserved below rather than deleted:)* Resolved from open question to established fact on 2026-08-21 by `scripts/verify_access.py`. The account authenticates: a CAS login naming **no service** returns **HTTP 200 with a TGC cookie**. The *same* credentials in a login naming the EnMAP download service return **401**, and an HTTP-Basic request to the asset returns **403** whose body reads *"insufficient privileges to download this dataset"*. CAS authorises **per service**, so a missing entitlement is byte-indistinguishable from a wrong password unless the two logins are compared — which cost this project an hour of misdiagnosis. EnMAP archive access needs a **role assignment** via the Instrument Planning Portal, and `planning.enmap.org` / `enmap-planning.eoc.dlr.de` resolve in DNS but **refuse TCP connections**. | **Whether the download leg itself works TODAY is a separate, still-untested question.** CLAUDE.md scopes credential/network checks out of the work that produced this correction, so `scripts/verify_access.py` was **not** re-run here — this entry neither confirms nor denies that the entitlement has cleared since 2026-08-21. What changed is that **Phase 5 Level 2 no longer depends on the answer**: the data it needs is already on disk, verified, and run. If the download leg is later confirmed working, that only matters for *acquiring more* EnMAP scenes (extending the 8 already in hand) or for O12/SpectralEarth below — not for whether Level 2 can proceed. *(Original diagnosis notes, preserved:)* There is no separate "EnMAP Access Service account": the register link on the EnMAP login page points at the *same* `sso.eoc.dlr.de/geoservice/selfservice` registration. Permissions live in **Keycloak** (realm `geoservice`), the download wall is **CAS** (`/eoc/auth/login`); a stale session in one can shadow the other. If pursued further: contact **`eoc-ums-helpdesk@dlr.de`**, and re-run `scripts/verify_access.py` (PASSes only on real TIFF magic bytes). |
 | O12 | **SpectralEarth — candidate for the self-supervised arm.** Status note added 2026-08-23 (D32): **O11's correction says nothing about this row.** | The EOC Geoservice EnMAP catalogue (`geoservice.dlr.de/web/datasets/enmap`) holds four collections, not one. Besides L2A: **SpectralEarth** — 538 974 patches / 415 153 locations / 11 636 EnMAP scenes, ~3.3 TB, built expressly for self-supervised hyperspectral pretraining (arXiv 2408.08447) — and **HyBiomass** (EnMAP L2A + GEDI L4A labels). §5.2's masked-band SSL arm currently pretrains on the local background pool; SpectralEarth is the same idea three orders of magnitude larger. Caveats: it is **non-georeferenced** (fine for pretraining, useless for the geospatial arm), it is 3.3 TB against 7.8 GB currently on disk (unchanged figure -- not re-verified here) so only a subset is usable, and it sits behind the **same** EnMAP Access Service wall as L2A (verified 2026-08-21: all of L2A, SPECTRAL_EARTH and HYBIOMASS redirect to the same CAS login). **O11's correction is about L2A only** — the 8 products found on disk are L2A products, not SpectralEarth, and no SpectralEarth data was found anywhere in this repository during the same disk search that found the L2A products. So O12's own status is **unchanged and still genuinely open**: it depends on the live download leg, which — per O11's corrected right-hand column — remains untested, not on whatever premise O11's title previously implied. | Decide only after the download leg is actually re-tested (not assumed from O11's data-on-disk finding, which does not apply here) and after §8.0 verifies EnMAP band/wavelength facts. Check `github.com/AABNassim/spectral_earth` for a subset or mirror first — a 3.3 TB pull is out of scope regardless. Do not let a foundation-model detour displace the critical path in §11. |
 | ~~O4~~ | ~~**QGIS install**~~ | **CLOSED 2026-08-22 (D26).** QGIS 4.2.1 installed; `qgis/projects/phase2_verify.qgz` built and checked — affine plumbing confirmed, **Phase 2 exit signed off**. `demo_verify.qgz` additionally confirmed real georeferencing on HAD100 against OpenStreetMap (Dogpound Creek, Alberta). Feature-level Level 2 accuracy remains open — no independently-known target exists in that scene. | — |
-| O5 | **Level-3 case-study site** | Depends on the `landcover` profile and Sentinel-2 coverage of a known dated event. | Pick during Phase 5 from actual data availability; record the selection rationale in `docs/validation.md`. |
+| ~~O5~~ | ~~**Level-3 case-study site**~~ | **RESOLVED 2026-08-23 (D34).** Noida International Airport (Jewar), 77.61E/28.17N, MGRS T43RGM — selected from actual Sentinel-2 availability as O5 prescribed, not from a shortlist decided in advance. Four low-cloud dates (2020-10-16, 2022-03-30, 2024-10-30, 2026-06-17) bracket the publicly dated 25 Nov 2021 groundbreaking. Civil infrastructure, deliberately: no conflict, border or displacement framing is needed or permitted. Rationale and rejected categories recorded in `docs/validation.md` per this row's own instruction. | — |
 | ~~O6~~ | ~~**Fusion weight tuning split**~~ | **RESOLVED 2026-08-22.** `scripts/tune_fusion_weights.py` fixed a deterministic split before any number was reported: 5 TUNE scenes, 8 REPORT scenes, recorded in `experiments/rx_vs_ae/fusion_weights.json`. D25 reports only from the held-out 8. This row's original text guessed a seeded **4/9** split; the committed split is **5/8** — a deviation from the guess, recorded here rather than silently corrected. | — |
 | ~~O8~~ | **ABU/HYDICE/Indian Pines carry no wavelength arrays (D13.4)** | **CLOSED — decided, not open.** Option 2 is adopted: learned models score on HAD100 only; classical detectors keep ABU + HYDICE + HAD100. Written into §3B.8, §13 rule 6, and the C1 contract. **No longer blocks 3B.** The cost — LODO cut from five arms to three, single-sensor generalization — is stated in §3B.8 rather than absorbed silently. |
 | O9 | **Recover true per-scene wavelengths for ABU/HYDICE** | Their parent AVIRIS flight lines may be identifiable, and NASA's public per-flight calibration archive publishes wavelength/FWHM tables per flight. If a scene can be matched to its flightline, its real wavelength array is recoverable — which would restore ABU/HYDICE for learned models and un-suspend the two LODO arms. ABU's seven distinct band counts make the matching non-trivial: the retained-band subset differs per scene and is undocumented. | **Does not block anything currently scheduled.** Not on the critical path, not a Phase 3B gate, not a Phase 5 gate. Pursue opportunistically; if it fails or is never attempted, O8's decision stands unchanged and the plan is complete without it. |

@@ -1,0 +1,23 @@
+{
+  "stage": "postfilter.filter_rois",
+  "roi_id": "S2B_MSIL2A_20260617T052649_N0512_R105_T43RGM_20260617T104156.SAFE_stack:change:0051",
+  "source_branch": "change",
+  "target_profile": "landcover",
+  "bbox": [
+    111,
+    249,
+    115,
+    255
+  ],
+  "area_px": 13.0,
+  "solidity": 0.8666666666666667,
+  "major_axis_length": 6.081683435644867,
+  "minor_axis_length": 2.774800375008483,
+  "elongation": 2.1917553026229046,
+  "min_area_px": 50,
+  "max_area_px": null,
+  "min_solidity": 0.05,
+  "max_elongation": 20.0,
+  "failing_criterion": "area_below_min",
+  "margin": 37.0
+}

@@ -217,6 +217,22 @@ def main() -> int:
         else:
             print("  SKIP phase5_level2_verify: run "
                   "`python -m pipeline.run_pipeline --source enmap ...` first")
+
+        l3 = ROOT / "experiments" / "phase5_level3" / "intervals"
+        l3_pairs = sorted(zip(sorted(l3.glob("*_change_norm.tif")),
+                               sorted(l3.glob("*_change_rois.geojson"))))
+        for raster, vector in l3_pairs:
+            name = "phase5_level3_" + raster.name.replace("_change_norm.tif", "").replace("-", "")
+            build(name, raster, vector, basemap=True,
+                  note=("Phase 5 Level 3 (PLAN.md §8): Sentinel-2 S2B-only change interval "
+                        f"{raster.stem.replace('_change_norm', '')}, Jewar Airport AOI, REAL "
+                        "georeferencing (EPSG:32643, from the GeoTIFF header). SAM + physics-"
+                        "fusion change score, magma 0-1. Basemap included so a human can check "
+                        "flagged regions against real-world features -- this is the QGIS check "
+                        "Level 3's accept criteria still needs (see docs/validation.md); this "
+                        "project's existence does NOT mean that check has been performed."))
+        if not l3_pairs:
+            print("  SKIP phase5_level3_*: run `python scripts/run_level3_case_study.py` first")
     finally:
         app.exitQgis()
     return 0
