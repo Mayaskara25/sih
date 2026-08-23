@@ -53,10 +53,19 @@ Genuinely open right now:
   drift). Still documentation-only: **AVIRIS flightlines** and **USGS splib07**.
   The plan's rule stands: assume documentation is wrong until you open the file.
   Both verifications found the spec wrong — EnMAP in D32, Sentinel-2 twice in D34.
-- **Fetchers — `fetch_sentinel2.py` exists** and works (CDSE). `fetch_enmap.py` was
-  never written: the 20 local scenes were fetched manually, so a scripted,
-  re-runnable fetcher with a manifest is still open work. O11 and O5 are both
-  resolved, so nothing external blocks it.
+- **`fetch_enmap.py` — the highest-value open item.** The DLR download leg **works**
+  (`scripts/verify_access.py::dlr()` passes: CAS login returns a TGC, an authenticated
+  asset GET returns real TIFF bytes), but **nothing in this repo can reproduce a
+  download.** Of the 20 local scenes, 8 were fetched by hand and 12 by a script that
+  was never committed. `find_enmap_scenes.py` only *searches* — STAC, no auth — and
+  tells you to download in a browser. So a teammate who clones this cannot obtain
+  EnMAP data, and the 20 scenes we have are unreproducible artifacts.
+  Wanted: a fetcher using `core.credentials.require("dlr")`, the CAS/TGC flow already
+  demonstrated in `verify_access.py`, and the asset URLs `find_enmap_scenes.py`
+  already emits — writing a manifest (ids, dates, bytes, checksums) so a download can
+  be verified and resumed. Nothing external blocks it.
+- **Fetchers — `fetch_sentinel2.py` exists** and works (CDSE), and is the model to
+  follow: credentials via `core.credentials`, re-runnable, manifest-merging, bounded.
 - **`scripts/fetch_speclib.py::ingest()`** is a deliberate stub (D21): a human
   must browser-download the archive first; the parser gets written against the
   real files. This is the cheapest unblock in the project.
